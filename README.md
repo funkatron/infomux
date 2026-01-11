@@ -300,6 +300,7 @@ Stopping: stop word 'stop recording'
 | `transcribe` | Plain text transcript (default) | extract_audio → transcribe |
 | `summarize` | Transcript + LLM summary | extract_audio → transcribe → summarize |
 | `timed` | Word-level timestamps (SRT/VTT/JSON) | extract_audio → transcribe_timed |
+| `report` | Full analysis: text, timestamps, summary | extract_audio → transcribe → transcribe_timed → summarize |
 | `caption` | Soft subtitles (toggleable) | extract_audio → transcribe_timed → embed_subs |
 | `caption-burn` | Burned-in subtitles (permanent) | extract_audio → transcribe_timed → embed_subs |
 

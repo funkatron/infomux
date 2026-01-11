@@ -193,6 +193,30 @@ CAPTION_BURN_PIPELINE = PipelineDef(
     ],
 )
 
+# Full report: transcript + timestamps + summary
+REPORT_PIPELINE = PipelineDef(
+    name="report",
+    description="Full analysis: transcript, timestamps, and summary",
+    steps=[
+        StepDef(
+            name="extract_audio",
+            input_from=None,
+        ),
+        StepDef(
+            name="transcribe",
+            input_from="extract_audio",
+        ),
+        StepDef(
+            name="transcribe_timed",
+            input_from="extract_audio",  # Also uses audio.wav
+        ),
+        StepDef(
+            name="summarize",
+            input_from="transcribe",  # Uses transcript.txt
+        ),
+    ],
+)
+
 # Available pipelines
 PIPELINES: dict[str, PipelineDef] = {
     "transcribe": DEFAULT_PIPELINE,
@@ -200,6 +224,7 @@ PIPELINES: dict[str, PipelineDef] = {
     "timed": TIMED_PIPELINE,
     "caption": CAPTION_PIPELINE,
     "caption-burn": CAPTION_BURN_PIPELINE,
+    "report": REPORT_PIPELINE,
 }
 
 
