@@ -324,6 +324,8 @@ infomux run --list-pipelines
 | `store_sqlite` | run directory | → `infomux.db` | sqlite3 |
 | `store_s3` | run directory | → S3 bucket | boto3 |
 | `store_postgres` | run directory | → PostgreSQL | psycopg2 |
+| `store_obsidian` | run directory | → Obsidian vault | (built-in) |
+| `store_bear` | run directory | → Bear.app | macOS only |
 
 ### Data Flow
 
@@ -488,6 +490,10 @@ Every run produces a complete execution record:
 | `INFOMUX_S3_BUCKET` | S3 bucket for `store_s3` | *(required if using S3)* |
 | `INFOMUX_S3_PREFIX` | S3 key prefix | `infomux/` |
 | `INFOMUX_POSTGRES_URL` | PostgreSQL connection URL for `store_postgres` | *(required if using PG)* |
+| `INFOMUX_OBSIDIAN_VAULT` | Path to Obsidian vault for `store_obsidian` | *(required if using Obsidian)* |
+| `INFOMUX_OBSIDIAN_FOLDER` | Subfolder in vault for transcripts | `Transcripts` |
+| `INFOMUX_OBSIDIAN_TAGS` | Comma-separated default tags | `infomux,transcript` |
+| `INFOMUX_BEAR_TAGS` | Comma-separated default tags for Bear | `infomux,transcript` |
 
 ### Whisper Model Options
 
