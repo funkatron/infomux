@@ -35,11 +35,11 @@ infomux run --pipeline summarize meeting.mp4
 | Platform | Status | Notes |
 |----------|--------|-------|
 | macOS (Apple Silicon) | ✅ Tested | Metal acceleration, fastest transcription |
-| macOS (Intel) | ✅ Should work | No Metal, slower |
+| macOS (Intel) | 🤷‍♀️ Should work | No Metal, slower |
 | Linux | 🔶 Untested | See known issues below |
 | Windows | ❌ Not supported | PRs welcome |
 
-**Linux known issues:**
+**Linux known/probable issues:**
 
 1. **Audio device discovery** — Uses `ffmpeg -f avfoundation` which is macOS-only. Linux needs `-f alsa` or `-f pulse`. The `audio.py` module would need platform detection.
 
@@ -71,7 +71,7 @@ export INFOMUX_WHISPER_MODEL="$HOME/.local/share/infomux/models/whisper/ggml-bas
 
 # 5. Install infomux (using uv, or pip)
 uv venv --python 3.11 && source .venv/bin/activate
-uv pip install -e .
+uv sync && uv pip install -e .
 
 # 6. Verify everything works
 infomux run --check-deps
@@ -81,6 +81,37 @@ infomux run your-podcast.mp4
 ```
 
 > **Tip:** For summarization, also install [Ollama](https://ollama.ai) and run `ollama pull qwen2.5:7b-instruct`
+
+---
+
+## Supported Input Formats
+
+infomux accepts any audio or video format that ffmpeg can decode. The `extract_audio` step automatically converts to 16kHz mono WAV for whisper.
+
+### Video
+| Format | Extension | Notes |
+|--------|-----------|-------|
+| MP4 | `.mp4` | Most common, recommended |
+| QuickTime | `.mov` | Native macOS format |
+| Matroska | `.mkv` | Common for downloads |
+| WebM | `.webm` | YouTube/web downloads |
+| AVI | `.avi` | Legacy Windows format |
+
+### Audio
+| Format | Extension | Notes |
+|--------|-----------|-------|
+| WAV | `.wav` | Uncompressed, best quality |
+| MP3 | `.mp3` | Most common compressed |
+| FLAC | `.flac` | Lossless compressed |
+| AAC/M4A | `.m4a`, `.aac` | Apple/podcast format |
+| Ogg Vorbis | `.ogg` | Open format |
+
+### Not Supported
+- **Images** — no audio to transcribe
+- **Streams** — use `infomux stream` for live capture
+- **Encrypted files** — DRM-protected content won't decode
+
+> **Tip:** If ffmpeg can play it, infomux can process it. Test with: `ffmpeg -i yourfile.xyz`
 
 ---
 
@@ -122,6 +153,8 @@ infomux -v run input.mp4
 
 # Specify a pipeline
 infomux run --pipeline transcribe input.mp4
+infomux run --pipeline summarize input.mp4
+infomux run --pipeline caption music_video.mp4  # → video with embedded subtitles
 
 # List available pipelines
 infomux run --list-pipelines
@@ -266,6 +299,7 @@ Stopping: stop word 'stop recording'
 |----------|-------|----------|
 | `transcribe` (default) | extract_audio → transcribe | ffmpeg, whisper-cli |
 | `summarize` | extract_audio → transcribe → summarize | ffmpeg, whisper-cli, Ollama |
+| `caption` | extract_audio → transcribe_timed → embed_subs | ffmpeg, whisper-cli |
 
 ```bash
 # List available pipelines
@@ -278,14 +312,27 @@ infomux run --list-pipelines
 |------|-------|--------|------|
 | `extract_audio` | media file | `audio.wav` (16kHz mono) | ffmpeg |
 | `transcribe` | `audio.wav` | `transcript.txt` | whisper-cli |
+| `transcribe_timed` | `audio.wav` | `transcript.srt`, `.vtt`, `.json` | whisper-cli -dtw |
 | `summarize` | `transcript.txt` | `summary.md` | Ollama |
+| `embed_subs` | video + `.srt` | `video_captioned.mp4` | ffmpeg |
 
 ### Data Flow
 
 ```
+# transcribe pipeline (default)
 input.mp4 → [extract_audio] → audio.wav → [transcribe] → transcript.txt
-                                                ↓
-                                          [summarize] → summary.md
+
+# summarize pipeline
+input.mp4 → [extract_audio] → audio.wav → [transcribe] → transcript.txt
+                                                 ↓
+                                           [summarize] → summary.md
+
+# caption pipeline (for music videos, lyrics)
+input.mp4 → [extract_audio] → audio.wav → [transcribe_timed] → transcript.srt/vtt/json
+    ↓                                                                    ↓
+    └───────────────────────────────────→ [embed_subs] ←─────────────────┘
+                                               ↓
+                                    video_captioned.mp4 (with soft subtitles)
 ```
 
 ---
