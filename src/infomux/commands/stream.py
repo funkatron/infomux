@@ -1,15 +1,17 @@
 """
-The 'stream' command: real-time audio capture and transcription.
+The 'stream' command: real-time audio capture and pipeline processing.
 
-Uses whisper-stream for live transcription from an audio input device.
+Uses whisper-stream for live transcription from an audio input device,
+then optionally processes the captured audio through a pipeline.
 
 Usage:
-    infomux stream                    # Interactive device selection
-    infomux stream --device 3         # Use device 3 directly
-    infomux stream --list-devices     # List available devices
-    infomux stream --duration 60      # Stop after 60 seconds
-    infomux stream --silence 5        # Stop after 5 seconds of silence
-    infomux stream --stop-word "stop" # Stop when "stop" is detected
+    infomux stream                      # Capture and transcribe
+    infomux stream --pipeline summarize # Capture, transcribe, summarize
+    infomux stream --device 3           # Use device 3 directly
+    infomux stream --list-devices       # List available devices
+    infomux stream --duration 60        # Stop after 60 seconds
+    infomux stream --silence 5          # Stop after 5 seconds of silence
+    infomux stream --stop-word "stop"   # Stop when "stop" is detected
 """
 
 from __future__ import annotations
@@ -30,8 +32,10 @@ from infomux.audio import (
     select_audio_device,
 )
 from infomux.config import find_tool, get_whisper_model_path
-from infomux.job import JobEnvelope, JobStatus
+from infomux.job import InputFile, JobEnvelope, JobStatus
 from infomux.log import get_logger
+from infomux.pipeline import run_pipeline
+from infomux.pipeline_def import get_pipeline, list_pipelines
 from infomux.storage import get_run_dir, save_job
 
 logger = get_logger(__name__)
@@ -88,6 +92,19 @@ def configure_parser(parser: ArgumentParser) -> None:
         default="stop recording",
         metavar="PHRASE",
         help="Stop recording when this phrase is detected (default: 'stop recording')",
+    )
+    parser.add_argument(
+        "--pipeline",
+        "-p",
+        type=str,
+        default=None,
+        metavar="NAME",
+        help="Pipeline to run after capture (e.g., transcribe, summarize)",
+    )
+    parser.add_argument(
+        "--list-pipelines",
+        action="store_true",
+        help="List available pipelines and exit",
     )
 
 
@@ -204,9 +221,22 @@ def execute(args: Namespace) -> int:
     Returns:
         Exit code (0 for success, non-zero for errors).
     """
-    # List devices mode
+    # List modes
     if args.list_devices:
         return _list_devices()
+
+    if args.list_pipelines:
+        return _list_pipelines_cmd()
+
+    # Validate pipeline if specified
+    pipeline = None
+    if args.pipeline:
+        try:
+            pipeline = get_pipeline(args.pipeline)
+            logger.info("will run pipeline '%s' after capture", pipeline.name)
+        except ValueError as e:
+            logger.error(str(e))
+            return 1
 
     # Find whisper-stream
     whisper_stream = find_tool("whisper-stream")
@@ -305,24 +335,46 @@ def execute(args: Namespace) -> int:
         save_job(job)
         return return_code
 
-    # Post-process for precise timestamps if audio was saved
+    # Post-process captured audio
     if save_audio:
         audio_file = _find_saved_audio(run_dir)
         if audio_file:
-            logger.info("Post-processing for precise timestamps...")
             job.artifacts.append(str(audio_file))
 
-            # Run whisper-cli for precise timestamps
-            timestamp_result = _run_whisper_cli_timestamps(
-                audio_file=audio_file,
-                model_path=model_path,
-                language=args.language,
-                run_dir=run_dir,
-            )
-            if timestamp_result:
-                for artifact in timestamp_result:
-                    job.artifacts.append(str(artifact))
-                    logger.info("Created: %s", artifact.name)
+            if pipeline:
+                # Run the specified pipeline on the captured audio
+                logger.info("Running pipeline '%s' on captured audio...", pipeline.name)
+
+                # Update job with input info for pipeline
+                job.input = InputFile.from_path(audio_file)
+
+                # Run pipeline (skip steps that don't apply to audio-only)
+                skip_steps = {"extract_audio", "embed_subs"}  # No video input
+                steps_to_run = [
+                    s.name for s in pipeline.steps if s.name not in skip_steps
+                ]
+                success = run_pipeline(
+                    job=job,
+                    run_dir=run_dir,
+                    pipeline=pipeline,
+                    step_names=steps_to_run,
+                )
+                if not success:
+                    save_job(job)
+                    return 1
+            else:
+                # Default: just get precise timestamps
+                logger.info("Post-processing for precise timestamps...")
+                timestamp_result = _run_whisper_cli_timestamps(
+                    audio_file=audio_file,
+                    model_path=model_path,
+                    language=args.language,
+                    run_dir=run_dir,
+                )
+                if timestamp_result:
+                    for artifact in timestamp_result:
+                        job.artifacts.append(str(artifact))
+                        logger.info("Created: %s", artifact.name)
 
     # Add rough transcript if it exists
     if transcript_path.exists():
@@ -471,6 +523,30 @@ def _list_devices() -> int:
     print()
     print("Use: infomux stream --device <id>")
 
+    return 0
+
+
+def _list_pipelines_cmd() -> int:
+    """
+    List available pipelines.
+
+    Returns:
+        Exit code (0 for success).
+    """
+    print("Available pipelines for stream:")
+    print()
+    skip_steps = {"extract_audio", "embed_subs"}  # Don't apply to audio-only
+    for name in list_pipelines():
+        pipeline = get_pipeline(name)
+        # Show pipelines that make sense for audio input
+        steps = [s.name for s in pipeline.steps if s.name not in skip_steps]
+        if steps:
+            print(f"  {name}")
+            print(f"    {pipeline.description}")
+            print(f"    Steps: {' → '.join(steps)}")
+            print()
+
+    print("Use: infomux stream --pipeline <name>")
     return 0
 
 
