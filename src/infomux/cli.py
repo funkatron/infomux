@@ -15,6 +15,7 @@ from infomux import __version__
 from infomux.commands import inspect as inspect_cmd
 from infomux.commands import resume as resume_cmd
 from infomux.commands import run as run_cmd
+from infomux.commands import stream as stream_cmd
 from infomux.log import configure_logging, get_logger
 
 if TYPE_CHECKING:
@@ -37,6 +38,8 @@ def create_parser() -> argparse.ArgumentParser:
         epilog="""
 Examples:
   infomux run input.mp4              Run pipeline on a media file
+  infomux stream                     Record and transcribe live
+  infomux stream --device 0          Record from specific device
   infomux inspect abc123             Inspect a previous run
   infomux resume abc123              Resume an interrupted run
 
@@ -95,6 +98,14 @@ Environment:
     )
     resume_cmd.configure_parser(resume_parser)
 
+    # stream subcommand
+    stream_parser = subparsers.add_parser(
+        "stream",
+        help="Real-time audio capture and transcription",
+        description="Record from microphone and transcribe in real-time.",
+    )
+    stream_cmd.configure_parser(stream_parser)
+
     return parser
 
 
@@ -133,6 +144,8 @@ def main(argv: list[str] | None = None) -> int:
             return inspect_cmd.execute(args)
         elif args.command == "resume":
             return resume_cmd.execute(args)
+        elif args.command == "stream":
+            return stream_cmd.execute(args)
         else:
             # This shouldn't happen due to required=True on subparsers
             parser.print_help(sys.stderr)
