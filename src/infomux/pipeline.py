@@ -3,6 +3,8 @@ Pipeline orchestration for infomux.
 
 Coordinates the execution of pipeline steps, updating the job envelope
 as each step completes. Handles step dependencies and failure recovery.
+
+Steps are auto-discovered from infomux.steps - no manual imports needed.
 """
 
 from __future__ import annotations
@@ -13,26 +15,9 @@ from pathlib import Path
 from infomux.job import JobEnvelope, JobStatus, StepRecord
 from infomux.log import get_logger
 from infomux.pipeline_def import DEFAULT_PIPELINE, PipelineDef, get_pipeline
-from infomux.steps import StepResult
-from infomux.steps.embed_subs import run as run_embed_subs
-from infomux.steps.extract_audio import AUDIO_FILENAME
-from infomux.steps.extract_audio import run as run_extract_audio
-from infomux.steps.summarize import SUMMARY_FILENAME
-from infomux.steps.summarize import run as run_summarize
-from infomux.steps.transcribe import TRANSCRIPT_FILENAME
-from infomux.steps.transcribe import run as run_transcribe
-from infomux.steps.transcribe_timed import run as run_transcribe_timed
+from infomux.steps import get_step_output, run_step
 
 logger = get_logger(__name__)
-
-# Step output filenames for input resolution
-STEP_OUTPUTS: dict[str, str] = {
-    "extract_audio": AUDIO_FILENAME,
-    "transcribe": TRANSCRIPT_FILENAME,
-    "transcribe_timed": "transcript.srt",  # Primary output for embed_subs
-    "summarize": SUMMARY_FILENAME,
-    "embed_subs": None,  # Output depends on input video name
-}
 
 
 def run_pipeline(
@@ -97,7 +82,7 @@ def run_pipeline(
             input_path = step_outputs[step_def.input_from]
         else:
             # Look for expected output file from previous step
-            expected_output = STEP_OUTPUTS.get(step_def.input_from)
+            expected_output = get_step_output(step_def.input_from)
             if expected_output:
                 input_path = run_dir / expected_output
                 if not input_path.exists():
@@ -115,8 +100,8 @@ def run_pipeline(
         )
         job.steps.append(step_record)
 
-        # Run the step
-        result = _run_step(step_name, input_path, run_dir, step_def.config)
+        # Run the step via registry
+        result = run_step(step_name, input_path, run_dir, step_def.config)
 
         # Update step record
         step_record.status = "completed" if result.success else "failed"
@@ -149,47 +134,6 @@ def run_pipeline(
         )
 
     return all_success
-
-
-def _run_step(
-    step_name: str,
-    input_path: Path,
-    output_dir: Path,
-    config: dict | None = None,
-) -> StepResult:
-    """
-    Run a single pipeline step.
-
-    Args:
-        step_name: Name of the step to run.
-        input_path: Input file for this step.
-        output_dir: Directory for output artifacts.
-        config: Step-specific configuration.
-
-    Returns:
-        StepResult with execution details.
-    """
-    # Step dispatch - this could be made more dynamic with a registry
-    if step_name == "extract_audio":
-        return run_extract_audio(input_path, output_dir)
-    elif step_name == "transcribe":
-        return run_transcribe(input_path, output_dir)
-    elif step_name == "transcribe_timed":
-        return run_transcribe_timed(input_path, output_dir)
-    elif step_name == "summarize":
-        return run_summarize(input_path, output_dir)
-    elif step_name == "embed_subs":
-        burn_in = config.get("burn_in", False) if config else False
-        return run_embed_subs(input_path, output_dir, burn_in=burn_in)
-    else:
-        logger.error("unknown step: %s", step_name)
-        return StepResult(
-            name=step_name,
-            success=False,
-            outputs=[],
-            duration_seconds=0,
-            error=f"unknown step: {step_name}",
-        )
 
 
 def get_resumable_steps(

@@ -26,8 +26,9 @@ from infomux.steps import StepError, StepResult, register_step
 
 logger = get_logger(__name__)
 
-# Output filename prefix
+# Output filename prefix and primary output (for pipeline input resolution)
 OUTPUT_PREFIX = "transcript"
+TRANSCRIPT_TIMED_FILENAME = "transcript.srt"  # Primary output for downstream steps
 
 
 def _detect_model_type(model_path: Path) -> str:
