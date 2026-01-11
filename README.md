@@ -319,7 +319,11 @@ infomux run --list-pipelines
 | `transcribe_timed` | `audio.wav` | `transcript.srt`, `.vtt`, `.json` | whisper-cli -dtw |
 | `summarize` | `transcript.txt` | `summary.md` | Ollama |
 | `embed_subs` | video + `.srt` | `video_captioned.mp4` | ffmpeg |
+| `store_json` | run directory | `report.json` | (built-in) |
+| `store_markdown` | run directory | `report.md` | (built-in) |
 | `store_sqlite` | run directory | → `infomux.db` | sqlite3 |
+| `store_s3` | run directory | → S3 bucket | boto3 |
+| `store_postgres` | run directory | → PostgreSQL | psycopg2 |
 
 ### Data Flow
 
@@ -373,7 +377,7 @@ Each pipeline produces different output files:
 ├── audio.wav
 ├── transcript.txt     # Plain text
 ├── transcript.srt     # SRT subtitles
-├── transcript.vtt     # VTT subtitles  
+├── transcript.vtt     # VTT subtitles
 ├── transcript.json    # Word-level timestamps
 ├── summary.md         # LLM summary
 └── job.json
@@ -481,6 +485,9 @@ Every run produces a complete execution record:
 | `INFOMUX_WHISPER_CLI_PATH` | Override whisper-cli binary location | *(auto-detected from PATH)* |
 | `INFOMUX_OLLAMA_MODEL` | Ollama model for summarization | `qwen2.5:7b-instruct` |
 | `INFOMUX_OLLAMA_URL` | Ollama API URL | `http://localhost:11434` |
+| `INFOMUX_S3_BUCKET` | S3 bucket for `store_s3` | *(required if using S3)* |
+| `INFOMUX_S3_PREFIX` | S3 key prefix | `infomux/` |
+| `INFOMUX_POSTGRES_URL` | PostgreSQL connection URL for `store_postgres` | *(required if using PG)* |
 
 ### Whisper Model Options
 
