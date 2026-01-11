@@ -135,11 +135,24 @@ Artifacts:
 
 ### `infomux resume`
 
-Resume an interrupted or failed run. *(Stub - not fully implemented)*
+Resume an interrupted or failed run, or re-run specific steps.
 
 ```bash
-infomux resume run-20260111-020549-c36c19
+# Resume from first incomplete step
+infomux resume <run-id>
+
+# Re-run from a specific step (and all following)
+infomux resume --from-step transcribe <run-id>
+
+# Preview what would run
+infomux resume --dry-run <run-id>
 ```
+
+**Behavior:**
+- Loads existing job envelope from the run directory
+- Skips already-completed steps (unless `--from-step` specified)
+- Clears failed step records before re-running
+- Uses the same pipeline and input as the original run
 
 ---
 
@@ -314,13 +327,13 @@ src/infomux/
 - Pipeline definitions as data (`PipelineDef`, `StepDef`)
 - Step input/output dependency resolution
 - `--pipeline` and `--list-pipelines` flags
+- `resume` command with `--from-step` support
 - Dependency checking (`--check-deps`)
 - Dry-run mode (`--dry-run`)
 - Logging to stderr
 
 ### 🚧 Partially Implemented
 
-- `resume` command (parses args, step re-execution not wired)
 - `--steps` flag (parses, validates, but only 2 steps exist)
 
 ### ❌ Planned

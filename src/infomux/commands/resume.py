@@ -14,9 +14,12 @@ from __future__ import annotations
 import sys
 from argparse import ArgumentParser, Namespace
 
+from infomux.config import get_tool_paths
 from infomux.job import JobStatus
 from infomux.log import get_logger
-from infomux.storage import load_job, run_exists, save_job
+from infomux.pipeline import get_resumable_steps, run_pipeline
+from infomux.pipeline_def import get_pipeline
+from infomux.storage import get_run_dir, load_job, run_exists, save_job
 
 logger = get_logger(__name__)
 
@@ -75,75 +78,75 @@ def execute(args: Namespace) -> int:
 
     # Check if the run can be resumed
     if job.status == JobStatus.COMPLETED.value:
-        logger.error("run already completed: %s", run_id)
-        return 1
+        if not args.from_step:
+            logger.error("run already completed: %s", run_id)
+            logger.info("use --from-step to re-run specific steps")
+            return 1
+        else:
+            logger.info("re-running steps from '%s' on completed run", args.from_step)
 
     if job.status == JobStatus.RUNNING.value:
         logger.warning("run appears to be in progress - proceeding anyway")
 
-    # Find steps to resume
-    steps_to_run = _get_resumable_steps(job, args.from_step)
+    # Get the pipeline used for this run
+    pipeline_name = job.config.get("pipeline")
+    try:
+        pipeline = get_pipeline(pipeline_name)
+    except ValueError as e:
+        logger.error(str(e))
+        return 1
+
+    # Determine which steps to run
+    steps_to_run = get_resumable_steps(job, args.from_step)
 
     if not steps_to_run:
         logger.info("no steps to resume")
         return 0
 
-    logger.info("steps to resume: %s", [s.name for s in steps_to_run])
+    logger.info("steps to resume: %s", steps_to_run)
 
     if args.dry_run:
         logger.info("dry run mode - not executing")
-        for step in steps_to_run:
-            print(f"would run: {step.name}", file=sys.stdout)
+        print(f"Pipeline: {pipeline.name}")
+        print(f"Steps to run: {' → '.join(steps_to_run)}")
         return 0
+
+    # Validate dependencies before resuming
+    tools = get_tool_paths()
+    errors = tools.validate()
+    if errors:
+        for error in errors:
+            logger.error(error)
+        logger.error("run 'infomux run --check-deps' for more information")
+        return 1
+
+    # Clear failed/incomplete step records that will be re-run
+    # Keep completed steps that won't be re-run
+    job.steps = [s for s in job.steps if s.name not in steps_to_run]
 
     # Update status and save
     job.update_status(JobStatus.RUNNING)
+    job.error = None  # Clear previous error
     save_job(job)
 
-    # TODO: Execute remaining pipeline steps
-    # This is a stub - actual step execution will be implemented later
-    logger.info("pipeline resumption not yet implemented")
+    run_dir = get_run_dir(job.id)
+    logger.debug("run directory: %s", run_dir)
 
-    # Mark as completed (stub behavior)
-    job.update_status(JobStatus.COMPLETED)
+    # Execute the remaining steps
+    success = run_pipeline(job, run_dir, pipeline=pipeline, step_names=steps_to_run)
+
+    # Update final status
+    if success:
+        job.update_status(JobStatus.COMPLETED)
+        logger.info("run resumed and completed: %s", job.id)
+    else:
+        # Status already set by pipeline on failure
+        logger.error("run failed: %s", job.id)
+
+    # Save final state
     save_job(job)
 
-    # Output run ID to stdout for scripting
-    print(job.id, file=sys.stdout)
+    # Output run directory path to stdout for scripting
+    print(get_run_dir(job.id), file=sys.stdout)
 
-    logger.info("run resumed and completed: %s", job.id)
-    return 0
-
-
-def _get_resumable_steps(job, from_step: str | None) -> list:
-    """
-    Determine which steps need to be run.
-
-    Args:
-        job: The JobEnvelope to analyze.
-        from_step: Optional step name to resume from.
-
-    Returns:
-        List of StepRecords that should be executed.
-    """
-    if not job.steps:
-        # No steps recorded - would need to run full pipeline
-        logger.debug("no steps recorded in job")
-        return []
-
-    steps_to_run = []
-    should_include = from_step is None  # If no from_step, start from first incomplete
-
-    for step in job.steps:
-        # If from_step is specified, start including from that step
-        if from_step and step.name == from_step:
-            should_include = True
-
-        # If from_step is not specified, include incomplete steps
-        if from_step is None and step.status not in ("completed",):
-            should_include = True
-
-        if should_include:
-            steps_to_run.append(step)
-
-    return steps_to_run
+    return 0 if success else 1
