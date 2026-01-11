@@ -45,6 +45,42 @@ This document explains the internal design of infomux for contributors and maint
 
 ## Key Data Structures
 
+### `PipelineDef` (pipeline_def.py)
+
+Defines a pipeline as data, enabling declarative configuration:
+
+```python
+@dataclass
+class StepDef:
+    name: str                       # Step identifier
+    input_from: str | None = None   # Which step's output to use (None = original input)
+    config: dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class PipelineDef:
+    name: str                       # Pipeline name
+    description: str                # What this pipeline does
+    steps: list[StepDef]            # Ordered list of steps
+```
+
+The default pipeline is defined as:
+
+```python
+DEFAULT_PIPELINE = PipelineDef(
+    name="transcribe",
+    description="Extract audio and transcribe to text",
+    steps=[
+        StepDef(name="extract_audio", input_from=None),
+        StepDef(name="transcribe", input_from="extract_audio"),
+    ],
+)
+```
+
+This structure enables:
+- Loading pipelines from YAML/JSON config files (future)
+- Validating step dependencies
+- Serializing pipeline definitions in job envelopes
+
 ### `JobEnvelope` (job.py)
 
 The central record of a pipeline run. Serialized to `job.json`.
@@ -158,14 +194,14 @@ class SummarizeStep:
     def execute(self, input_path: Path, output_dir: Path) -> list[Path]:
         # Read transcript
         transcript = input_path.read_text()
-        
+
         # Generate summary (placeholder)
         summary = f"Summary of {len(transcript)} characters..."
-        
+
         # Write output
         output_path = output_dir / "summary.md"
         output_path.write_text(summary)
-        
+
         return [output_path]
 ```
 
@@ -190,10 +226,10 @@ def _run_step(step_name: str, input_path: Path, output_dir: Path) -> StepResult:
 def test_summarize_step(tmp_path):
     transcript = tmp_path / "transcript.txt"
     transcript.write_text("Hello world")
-    
+
     step = SummarizeStep()
     outputs = step.execute(transcript, tmp_path)
-    
+
     assert len(outputs) == 1
     assert outputs[0].name == "summary.md"
     assert outputs[0].exists()

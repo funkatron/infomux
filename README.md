@@ -57,7 +57,7 @@ It processes media files through well-defined pipeline steps, producing derived 
 ### What infomux is NOT
 
 - Not an "AI agent" that makes autonomous decisions
-- No destructive actions without explicit configuration  
+- No destructive actions without explicit configuration
 - No telemetry or phoning home
 - No anthropomorphic language in code or output
 
@@ -67,20 +67,26 @@ It processes media files through well-defined pipeline steps, producing derived 
 
 ### `infomux run`
 
-Process a media file through the pipeline.
+Process a media file through a pipeline.
 
 ```bash
-# Basic usage
+# Basic usage (uses default 'transcribe' pipeline)
 infomux run input.mp4
 
 # Verbose logging
 infomux -v run input.mp4
 
+# Specify a pipeline
+infomux run --pipeline transcribe input.mp4
+
+# List available pipelines
+infomux run --list-pipelines
+
+# Run specific steps only (subset of pipeline)
+infomux run --steps extract_audio input.mp4
+
 # Preview without executing
 infomux run --dry-run input.mp4
-
-# Run specific steps only
-infomux run --steps extract_audio input.mp4
 
 # Check dependencies
 infomux run --check-deps
@@ -198,7 +204,7 @@ Every run produces a complete execution record:
     },
     {
       "name": "transcribe",
-      "status": "completed", 
+      "status": "completed",
       "started_at": "2026-01-11T02:05:49.551Z",
       "completed_at": "2026-01-11T02:05:49.912Z",
       "duration_seconds": 0.37,
@@ -286,7 +292,7 @@ src/infomux/
 ├── storage.py          # Run directory management
 ├── commands/
 │   ├── run.py          # infomux run
-│   ├── inspect.py      # infomux inspect  
+│   ├── inspect.py      # infomux inspect
 │   └── resume.py       # infomux resume
 └── steps/
     ├── __init__.py     # Step protocol and registry
@@ -305,6 +311,9 @@ src/infomux/
 - Run storage under `~/.local/share/infomux/runs/`
 - `extract_audio` step (ffmpeg → 16kHz mono WAV)
 - `transcribe` step (whisper-cli → transcript.txt)
+- Pipeline definitions as data (`PipelineDef`, `StepDef`)
+- Step input/output dependency resolution
+- `--pipeline` and `--list-pipelines` flags
 - Dependency checking (`--check-deps`)
 - Dry-run mode (`--dry-run`)
 - Logging to stderr
@@ -312,13 +321,13 @@ src/infomux/
 ### 🚧 Partially Implemented
 
 - `resume` command (parses args, step re-execution not wired)
-- `--steps` flag (parses, but only 2 steps exist)
+- `--steps` flag (parses, validates, but only 2 steps exist)
 
 ### ❌ Planned
 
 - **Summarization** — Ollama integration
 - **Frame extraction** — Key frames from video
-- **Custom pipelines** — Config file for step sequences
+- **Custom pipelines** — Load from YAML/JSON config file
 - **Model auto-download** — `infomux setup` command
 - **Seed recording** — Full LLM reproducibility
 - **Progress reporting** — Real-time step progress

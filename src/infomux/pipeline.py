@@ -9,28 +9,30 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from infomux.job import JobEnvelope, JobStatus, StepRecord
 from infomux.log import get_logger
+from infomux.pipeline_def import DEFAULT_PIPELINE, PipelineDef, get_pipeline
 from infomux.steps import StepResult
 from infomux.steps.extract_audio import AUDIO_FILENAME
 from infomux.steps.extract_audio import run as run_extract_audio
+from infomux.steps.transcribe import TRANSCRIPT_FILENAME
 from infomux.steps.transcribe import run as run_transcribe
-
-if TYPE_CHECKING:
-    pass
 
 logger = get_logger(__name__)
 
-# Default pipeline: extract audio, then transcribe
-DEFAULT_STEPS = ["extract_audio", "transcribe"]
+# Step output filenames for input resolution
+STEP_OUTPUTS: dict[str, str] = {
+    "extract_audio": AUDIO_FILENAME,
+    "transcribe": TRANSCRIPT_FILENAME,
+}
 
 
 def run_pipeline(
     job: JobEnvelope,
     run_dir: Path,
-    steps: list[str] | None = None,
+    pipeline: PipelineDef | None = None,
+    step_names: list[str] | None = None,
 ) -> bool:
     """
     Execute the pipeline steps for a job.
@@ -38,30 +40,65 @@ def run_pipeline(
     Args:
         job: The job envelope to update with execution status.
         run_dir: Directory for run artifacts.
-        steps: List of step names to run (default: all steps).
+        pipeline: Pipeline definition to use (default: DEFAULT_PIPELINE).
+        step_names: Optional subset of steps to run.
 
     Returns:
         True if all steps completed successfully, False otherwise.
     """
-    if steps is None:
-        steps = DEFAULT_STEPS
+    if pipeline is None:
+        pipeline = DEFAULT_PIPELINE
 
     if not job.input:
         logger.error("no input file specified in job")
         job.update_status(JobStatus.FAILED, "no input file specified")
         return False
 
-    input_path = Path(job.input.path)
+    original_input = Path(job.input.path)
 
-    logger.info("running pipeline with %d steps: %s", len(steps), steps)
+    # Determine which steps to run
+    steps_to_run = pipeline.steps
+    if step_names:
+        steps_to_run = [s for s in pipeline.steps if s.name in step_names]
+        if not steps_to_run:
+            logger.error("no matching steps found")
+            return False
 
-    # Track the current input for each step
-    # First step uses the original input, subsequent steps use outputs
-    current_input = input_path
+    logger.info(
+        "running pipeline '%s' with %d steps: %s",
+        pipeline.name,
+        len(steps_to_run),
+        [s.name for s in steps_to_run],
+    )
+
+    # Store pipeline info in job config
+    job.config["pipeline"] = pipeline.name
+    job.config["pipeline_steps"] = pipeline.step_names()
+
+    # Track outputs from each step for input resolution
+    step_outputs: dict[str, Path] = {}
     all_success = True
 
-    for step_name in steps:
+    for step_def in steps_to_run:
+        step_name = step_def.name
         logger.info("starting step: %s", step_name)
+
+        # Resolve input for this step
+        if step_def.input_from is None:
+            input_path = original_input
+        elif step_def.input_from in step_outputs:
+            input_path = step_outputs[step_def.input_from]
+        else:
+            # Look for expected output file from previous step
+            expected_output = STEP_OUTPUTS.get(step_def.input_from)
+            if expected_output:
+                input_path = run_dir / expected_output
+                if not input_path.exists():
+                    input_path = original_input
+            else:
+                input_path = original_input
+
+        logger.debug("step input: %s", input_path)
 
         # Create step record
         step_record = StepRecord(
@@ -72,7 +109,7 @@ def run_pipeline(
         job.steps.append(step_record)
 
         # Run the step
-        result = _run_step(step_name, current_input, run_dir)
+        result = _run_step(step_name, input_path, run_dir, step_def.config)
 
         # Update step record
         step_record.status = "completed" if result.success else "failed"
@@ -89,6 +126,10 @@ def run_pipeline(
             all_success = False
             break
 
+        # Record outputs for subsequent steps
+        if result.outputs:
+            step_outputs[step_name] = result.outputs[0]
+
         # Add outputs to job artifacts
         job.artifacts.extend(step_record.outputs)
 
@@ -99,14 +140,15 @@ def run_pipeline(
             len(result.outputs),
         )
 
-        # Update current input for next step (use first output)
-        if result.outputs:
-            current_input = result.outputs[0]
-
     return all_success
 
 
-def _run_step(step_name: str, input_path: Path, output_dir: Path) -> StepResult:
+def _run_step(
+    step_name: str,
+    input_path: Path,
+    output_dir: Path,
+    config: dict | None = None,
+) -> StepResult:
     """
     Run a single pipeline step.
 
@@ -114,20 +156,17 @@ def _run_step(step_name: str, input_path: Path, output_dir: Path) -> StepResult:
         step_name: Name of the step to run.
         input_path: Input file for this step.
         output_dir: Directory for output artifacts.
+        config: Step-specific configuration.
 
     Returns:
         StepResult with execution details.
     """
+    # Step dispatch - this could be made more dynamic with a registry
     if step_name == "extract_audio":
         return run_extract_audio(input_path, output_dir)
     elif step_name == "transcribe":
-        # Transcribe step expects audio.wav as input
-        audio_path = output_dir / AUDIO_FILENAME
-        if audio_path.exists():
-            input_path = audio_path
         return run_transcribe(input_path, output_dir)
     else:
-        # Unknown step
         logger.error("unknown step: %s", step_name)
         return StepResult(
             name=step_name,
@@ -138,7 +177,10 @@ def _run_step(step_name: str, input_path: Path, output_dir: Path) -> StepResult:
         )
 
 
-def get_resumable_steps(job: JobEnvelope, from_step: str | None = None) -> list[str]:
+def get_resumable_steps(
+    job: JobEnvelope,
+    from_step: str | None = None,
+) -> list[str]:
     """
     Determine which steps need to be run for resumption.
 
@@ -152,8 +194,10 @@ def get_resumable_steps(job: JobEnvelope, from_step: str | None = None) -> list[
     # Get completed steps
     completed = {s.name for s in job.steps if s.status == "completed"}
 
-    # Get requested steps from config or use defaults
-    all_steps = job.config.get("requested_steps", DEFAULT_STEPS)
+    # Get pipeline from job config or use default
+    pipeline_name = job.config.get("pipeline")
+    pipeline = get_pipeline(pipeline_name)
+    all_steps = pipeline.step_names()
 
     if from_step:
         # Resume from a specific step (re-run it and all following)

@@ -7,7 +7,8 @@ artifacts that are stored in the run directory.
 
 Usage:
     infomux run input.mp4
-    infomux run --steps transcribe,summarize input.mp4
+    infomux run --pipeline transcribe input.mp4
+    infomux run --steps extract_audio input.mp4
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from infomux.config import get_tool_paths
 from infomux.job import InputFile, JobEnvelope, JobStatus
 from infomux.log import get_logger
 from infomux.pipeline import run_pipeline
+from infomux.pipeline_def import get_pipeline, list_pipelines
 from infomux.storage import get_run_dir, save_job
 
 logger = get_logger(__name__)
@@ -35,14 +37,21 @@ def configure_parser(parser: ArgumentParser) -> None:
     parser.add_argument(
         "input",
         type=Path,
-        nargs="?",  # Optional when using --check-deps
+        nargs="?",  # Optional when using --check-deps or --list-pipelines
         help="Path to the input media file",
+    )
+    parser.add_argument(
+        "--pipeline",
+        "-p",
+        type=str,
+        default=None,
+        help="Pipeline to run (default: transcribe)",
     )
     parser.add_argument(
         "--steps",
         type=str,
         default=None,
-        help="Comma-separated list of steps to run (default: all)",
+        help="Comma-separated list of steps to run (subset of pipeline)",
     )
     parser.add_argument(
         "--dry-run",
@@ -53,6 +62,11 @@ def configure_parser(parser: ArgumentParser) -> None:
         "--check-deps",
         action="store_true",
         help="Check for required dependencies and exit",
+    )
+    parser.add_argument(
+        "--list-pipelines",
+        action="store_true",
+        help="List available pipelines and exit",
     )
 
 
@@ -66,6 +80,10 @@ def execute(args: Namespace) -> int:
     Returns:
         Exit code (0 for success, non-zero for errors).
     """
+    # List pipelines mode
+    if args.list_pipelines:
+        return _list_pipelines()
+
     # Check dependencies mode
     if args.check_deps:
         return _check_dependencies()
@@ -88,6 +106,15 @@ def execute(args: Namespace) -> int:
 
     logger.info("processing input: %s", input_path)
 
+    # Get pipeline definition
+    try:
+        pipeline = get_pipeline(args.pipeline)
+    except ValueError as e:
+        logger.error(str(e))
+        return 1
+
+    logger.info("using pipeline: %s", pipeline.name)
+
     # Create input file metadata
     try:
         input_file = InputFile.from_path(input_path)
@@ -100,16 +127,31 @@ def execute(args: Namespace) -> int:
     # Create job envelope
     job = JobEnvelope.create(input_file=input_file)
 
-    # Parse steps if specified
-    requested_steps = None
+    # Parse steps if specified (subset of pipeline)
+    step_names = None
     if args.steps:
-        requested_steps = [s.strip() for s in args.steps.split(",")]
-        job.config["requested_steps"] = requested_steps
-        logger.info("requested steps: %s", requested_steps)
+        step_names = [s.strip() for s in args.steps.split(",")]
+        # Validate steps exist in pipeline
+        valid_steps = set(pipeline.step_names())
+        invalid = [s for s in step_names if s not in valid_steps]
+        if invalid:
+            logger.error(
+                "unknown steps: %s (available: %s)",
+                invalid,
+                list(valid_steps),
+            )
+            return 1
+        logger.info("running steps: %s", step_names)
 
     if args.dry_run:
         logger.info("dry run mode - not executing")
-        # Output job envelope to stdout for inspection
+        # Show pipeline info
+        print(f"Pipeline: {pipeline.name}")
+        print(f"Description: {pipeline.description}")
+        print(f"Steps: {pipeline.step_names()}")
+        if step_names:
+            print(f"Selected: {step_names}")
+        print()
         print(job.to_json())
         return 0
 
@@ -130,7 +172,7 @@ def execute(args: Namespace) -> int:
     logger.debug("run directory: %s", run_dir)
 
     # Execute pipeline
-    success = run_pipeline(job, run_dir, steps=requested_steps)
+    success = run_pipeline(job, run_dir, pipeline=pipeline, step_names=step_names)
 
     # Update final status
     if success:
@@ -147,6 +189,24 @@ def execute(args: Namespace) -> int:
     print(run_dir, file=sys.stdout)
 
     return 0 if success else 1
+
+
+def _list_pipelines() -> int:
+    """
+    List available pipelines.
+
+    Returns:
+        Exit code (always 0).
+    """
+    print("Available pipelines:")
+    print()
+    for name in list_pipelines():
+        pipeline = get_pipeline(name)
+        print(f"  {name}")
+        print(f"    {pipeline.description}")
+        print(f"    Steps: {' → '.join(pipeline.step_names())}")
+        print()
+    return 0
 
 
 def _check_dependencies() -> int:
