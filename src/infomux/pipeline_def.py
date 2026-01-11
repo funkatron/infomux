@@ -135,10 +135,32 @@ SUMMARIZE_PIPELINE = PipelineDef(
     ],
 )
 
+# Caption pipeline: transcribe with timing and embed subtitles
+CAPTION_PIPELINE = PipelineDef(
+    name="caption",
+    description="Transcribe with word-level timing and embed subtitles into video",
+    steps=[
+        StepDef(
+            name="extract_audio",
+            input_from=None,
+        ),
+        StepDef(
+            name="transcribe_timed",
+            input_from="extract_audio",
+        ),
+        StepDef(
+            name="embed_subs",
+            input_from=None,  # Uses original video; finds .srt in output_dir
+            config={"burn_in": False},
+        ),
+    ],
+)
+
 # Available pipelines
 PIPELINES: dict[str, PipelineDef] = {
     "transcribe": DEFAULT_PIPELINE,
     "summarize": SUMMARIZE_PIPELINE,
+    "caption": CAPTION_PIPELINE,
 }
 
 

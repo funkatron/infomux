@@ -14,12 +14,14 @@ from infomux.job import JobEnvelope, JobStatus, StepRecord
 from infomux.log import get_logger
 from infomux.pipeline_def import DEFAULT_PIPELINE, PipelineDef, get_pipeline
 from infomux.steps import StepResult
+from infomux.steps.embed_subs import run as run_embed_subs
 from infomux.steps.extract_audio import AUDIO_FILENAME
 from infomux.steps.extract_audio import run as run_extract_audio
 from infomux.steps.summarize import SUMMARY_FILENAME
 from infomux.steps.summarize import run as run_summarize
 from infomux.steps.transcribe import TRANSCRIPT_FILENAME
 from infomux.steps.transcribe import run as run_transcribe
+from infomux.steps.transcribe_timed import run as run_transcribe_timed
 
 logger = get_logger(__name__)
 
@@ -27,7 +29,9 @@ logger = get_logger(__name__)
 STEP_OUTPUTS: dict[str, str] = {
     "extract_audio": AUDIO_FILENAME,
     "transcribe": TRANSCRIPT_FILENAME,
+    "transcribe_timed": "transcript.srt",  # Primary output for embed_subs
     "summarize": SUMMARY_FILENAME,
+    "embed_subs": None,  # Output depends on input video name
 }
 
 
@@ -170,8 +174,13 @@ def _run_step(
         return run_extract_audio(input_path, output_dir)
     elif step_name == "transcribe":
         return run_transcribe(input_path, output_dir)
+    elif step_name == "transcribe_timed":
+        return run_transcribe_timed(input_path, output_dir)
     elif step_name == "summarize":
         return run_summarize(input_path, output_dir)
+    elif step_name == "embed_subs":
+        burn_in = config.get("burn_in", False) if config else False
+        return run_embed_subs(input_path, output_dir, burn_in=burn_in)
     else:
         logger.error("unknown step: %s", step_name)
         return StepResult(
