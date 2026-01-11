@@ -162,6 +162,7 @@ infomux resume --dry-run <run-id>
 |------|-------|--------|------|
 | `extract_audio` | media file | `audio.wav` (16kHz mono) | ffmpeg |
 | `transcribe` | `audio.wav` | `transcript.txt` | whisper-cli |
+| `summarize` | `transcript.txt` | `summary.md` | Ollama |
 
 ### Default Pipeline
 
@@ -243,6 +244,8 @@ Every run produces a complete execution record:
 | `INFOMUX_WHISPER_MODEL` | Path to GGML whisper model file | `$INFOMUX_DATA_DIR/models/whisper/ggml-base.en.bin` |
 | `INFOMUX_FFMPEG_PATH` | Override ffmpeg binary location | *(auto-detected from PATH)* |
 | `INFOMUX_WHISPER_CLI_PATH` | Override whisper-cli binary location | *(auto-detected from PATH)* |
+| `INFOMUX_OLLAMA_MODEL` | Ollama model for summarization | `qwen2.5:7b-instruct` |
+| `INFOMUX_OLLAMA_URL` | Ollama API URL | `http://localhost:11434` |
 
 ### Whisper Model Options
 
@@ -331,18 +334,19 @@ src/infomux/
 - Dependency checking (`--check-deps`)
 - Dry-run mode (`--dry-run`)
 - Logging to stderr
+- Model/seed recording for reproducibility
+- `summarize` step (Ollama integration)
+- `summarize` pipeline (transcribe → summarize)
 
 ### 🚧 Partially Implemented
 
-- `--steps` flag (parses, validates, but only 2 steps exist)
+- `--steps` flag (parses, validates, 3 steps available)
 
 ### ❌ Planned
 
-- **Summarization** — Ollama integration
 - **Frame extraction** — Key frames from video
 - **Custom pipelines** — Load from YAML/JSON config file
 - **Model auto-download** — `infomux setup` command
-- **Seed recording** — Full LLM reproducibility
 - **Progress reporting** — Real-time step progress
 
 ---

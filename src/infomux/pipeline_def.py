@@ -116,9 +116,29 @@ DEFAULT_PIPELINE = PipelineDef(
     ],
 )
 
-# Future pipelines can be defined here or loaded from config
+SUMMARIZE_PIPELINE = PipelineDef(
+    name="summarize",
+    description="Extract audio, transcribe, and summarize with LLM",
+    steps=[
+        StepDef(
+            name="extract_audio",
+            input_from=None,
+        ),
+        StepDef(
+            name="transcribe",
+            input_from="extract_audio",
+        ),
+        StepDef(
+            name="summarize",
+            input_from="transcribe",  # Uses transcript.txt
+        ),
+    ],
+)
+
+# Available pipelines
 PIPELINES: dict[str, PipelineDef] = {
     "transcribe": DEFAULT_PIPELINE,
+    "summarize": SUMMARIZE_PIPELINE,
 }
 
 

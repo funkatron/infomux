@@ -62,6 +62,7 @@ class StepResult:
         outputs: List of output artifact paths.
         duration_seconds: How long the step took.
         error: Error message if the step failed.
+        model_info: Model and generation parameters (for LLM steps).
     """
 
     name: str
@@ -69,6 +70,7 @@ class StepResult:
     outputs: list[Path]
     duration_seconds: float
     error: str | None = None
+    model_info: dict | None = None
 
 
 class StepError(Exception):

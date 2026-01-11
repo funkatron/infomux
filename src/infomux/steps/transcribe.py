@@ -154,6 +154,19 @@ def run(input_path: Path, output_dir: Path) -> StepResult:
     step = TranscribeStep()
     start_time = time.monotonic()
 
+    # Get model info for recording
+    tools = get_tool_paths()
+    model_info = None
+    if tools.whisper_model:
+        model_info = {
+            "model": {
+                "name": tools.whisper_model.name,
+                "provider": "whisper.cpp",
+                "path": str(tools.whisper_model),
+            },
+            "params": {},  # whisper.cpp doesn't have generation params
+        }
+
     try:
         outputs = step.execute(input_path, output_dir)
         duration = time.monotonic() - start_time
@@ -162,6 +175,7 @@ def run(input_path: Path, output_dir: Path) -> StepResult:
             success=True,
             outputs=outputs,
             duration_seconds=duration,
+            model_info=model_info,
         )
     except StepError as e:
         duration = time.monotonic() - start_time
@@ -171,4 +185,5 @@ def run(input_path: Path, output_dir: Path) -> StepResult:
             outputs=[],
             duration_seconds=duration,
             error=str(e),
+            model_info=model_info,
         )

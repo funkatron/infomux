@@ -87,6 +87,7 @@ class StepRecord:
         duration_seconds: How long the step took, if finished.
         error: Error message if the step failed.
         outputs: List of output artifact paths produced by this step.
+        model_info: Model and generation parameters (for LLM steps).
     """
 
     name: str
@@ -96,6 +97,7 @@ class StepRecord:
     duration_seconds: float | None = None
     error: str | None = None
     outputs: list[str] = field(default_factory=list)
+    model_info: dict[str, Any] | None = None
 
 
 @dataclass

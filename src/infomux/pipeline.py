@@ -16,6 +16,8 @@ from infomux.pipeline_def import DEFAULT_PIPELINE, PipelineDef, get_pipeline
 from infomux.steps import StepResult
 from infomux.steps.extract_audio import AUDIO_FILENAME
 from infomux.steps.extract_audio import run as run_extract_audio
+from infomux.steps.summarize import SUMMARY_FILENAME
+from infomux.steps.summarize import run as run_summarize
 from infomux.steps.transcribe import TRANSCRIPT_FILENAME
 from infomux.steps.transcribe import run as run_transcribe
 
@@ -25,6 +27,7 @@ logger = get_logger(__name__)
 STEP_OUTPUTS: dict[str, str] = {
     "extract_audio": AUDIO_FILENAME,
     "transcribe": TRANSCRIPT_FILENAME,
+    "summarize": SUMMARY_FILENAME,
 }
 
 
@@ -116,6 +119,7 @@ def run_pipeline(
         step_record.completed_at = datetime.now(UTC).isoformat()
         step_record.duration_seconds = result.duration_seconds
         step_record.outputs = [str(p) for p in result.outputs]
+        step_record.model_info = result.model_info  # For LLM steps
 
         if not result.success:
             step_record.error = result.error
@@ -166,6 +170,8 @@ def _run_step(
         return run_extract_audio(input_path, output_dir)
     elif step_name == "transcribe":
         return run_transcribe(input_path, output_dir)
+    elif step_name == "summarize":
+        return run_summarize(input_path, output_dir)
     else:
         logger.error("unknown step: %s", step_name)
         return StepResult(
