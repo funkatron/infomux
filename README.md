@@ -154,6 +154,64 @@ infomux resume --dry-run <run-id>
 - Clears failed step records before re-running
 - Uses the same pipeline and input as the original run
 
+### `infomux stream`
+
+Real-time audio capture and transcription from a microphone.
+
+```bash
+# List available audio devices
+infomux stream --list-devices
+
+# Interactive device selection
+infomux stream
+
+# Use a specific device
+infomux stream --device 3
+
+# Stop after 60 seconds
+infomux stream --duration 60
+
+# Stop after 10 seconds of silence
+infomux stream --silence 10
+
+# Stop when phrase detected (default: "stop recording")
+infomux stream --stop-word "end session"
+
+# Combine options
+infomux stream --device 3 --duration 120 --silence 10
+```
+
+**Stop conditions:**
+- Press `Ctrl+C`
+- Duration limit reached (`--duration`)
+- Silence threshold exceeded (`--silence`)
+- Stop phrase detected (`--stop-word`, default: "stop recording")
+
+**Output artifacts:**
+- `audio.wav` — The recorded audio
+- `transcript.json` — Full JSON with word-level timestamps
+- `transcript.srt` — SRT subtitles
+- `transcript.vtt` — VTT subtitles
+
+**Example session:**
+```
+──────────────────────────────────────────────────
+  Recording from: M2
+
+  Stop recording by:
+    • Press Ctrl+C
+    • Wait 60 seconds (auto-stop)
+    • Say "stop recording"
+──────────────────────────────────────────────────
+
+[Start speaking]
+ Hello, this is a test recording...
+ Stop recording.
+
+Stopping: stop word 'stop recording'
+/Users/you/.local/share/infomux/runs/run-20260111-030000-abc123
+```
+
 ---
 
 ## Pipeline Steps
@@ -181,12 +239,17 @@ Each run creates a directory under `~/.local/share/infomux/runs/`:
 ```
 ~/.local/share/infomux/
 ├── runs/
-│   ├── run-20260111-020549-c36c19/
+│   ├── run-20260111-020549-c36c19/     # From 'infomux run'
 │   │   ├── job.json          # Execution metadata
 │   │   ├── audio.wav         # Extracted audio
 │   │   └── transcript.txt    # Transcription
-│   └── run-20260111-021000-ab12cd/
-│       └── ...
+│   ├── run-20260111-030000-abc123/     # From 'infomux stream'
+│   │   ├── job.json          # Execution metadata
+│   │   ├── audio.wav         # Recorded audio
+│   │   ├── transcript.json   # Full JSON with word-level timestamps
+│   │   ├── transcript.srt    # SRT subtitles
+│   │   └── transcript.vtt    # VTT subtitles
+│   └── ...
 └── models/
     └── whisper/
         └── ggml-base.en.bin  # Whisper model
@@ -304,16 +367,21 @@ src/infomux/
 ├── config.py           # Tool paths and environment variables
 ├── job.py              # JobEnvelope, InputFile, StepRecord dataclasses
 ├── log.py              # Logging configuration (stderr only)
+├── llm.py              # LLM reproducibility metadata (ModelInfo, GenerationParams)
+├── audio.py            # Audio device discovery
 ├── pipeline.py         # Step orchestration
+├── pipeline_def.py     # Pipeline definitions as data (PipelineDef, StepDef)
 ├── storage.py          # Run directory management
 ├── commands/
 │   ├── run.py          # infomux run
 │   ├── inspect.py      # infomux inspect
-│   └── resume.py       # infomux resume
+│   ├── resume.py       # infomux resume
+│   └── stream.py       # infomux stream (real-time transcription)
 └── steps/
     ├── __init__.py     # Step protocol and registry
     ├── extract_audio.py # ffmpeg wrapper
-    └── transcribe.py   # whisper-cli wrapper
+    ├── transcribe.py   # whisper-cli wrapper
+    └── summarize.py    # Ollama LLM wrapper
 ```
 
 ---
@@ -322,25 +390,25 @@ src/infomux/
 
 ### ✅ Implemented
 
-- CLI scaffold with `run`, `inspect`, `resume` subcommands
+- CLI scaffold with `run`, `inspect`, `resume`, `stream` subcommands
 - Job envelope with input hashing, step timing, artifact tracking
 - Run storage under `~/.local/share/infomux/runs/`
 - `extract_audio` step (ffmpeg → 16kHz mono WAV)
 - `transcribe` step (whisper-cli → transcript.txt)
+- `summarize` step (Ollama → summary.md)
 - Pipeline definitions as data (`PipelineDef`, `StepDef`)
 - Step input/output dependency resolution
 - `--pipeline` and `--list-pipelines` flags
+- `--steps` flag for running specific steps
 - `resume` command with `--from-step` support
 - Dependency checking (`--check-deps`)
 - Dry-run mode (`--dry-run`)
 - Logging to stderr
 - Model/seed recording for reproducibility
-- `summarize` step (Ollama integration)
-- `summarize` pipeline (transcribe → summarize)
-
-### 🚧 Partially Implemented
-
-- `--steps` flag (parses, validates, 3 steps available)
+- `stream` command for real-time audio capture
+- Word-level timestamps via whisper-cli post-processing
+- Multiple stop conditions (duration, silence, stop-word)
+- Audio device discovery and selection
 
 ### ❌ Planned
 
