@@ -8,7 +8,6 @@ import pytest
 
 from infomux.pipeline_def import (
     DEFAULT_PIPELINE,
-    PIPELINES,
     PipelineDef,
     StepDef,
     get_pipeline,

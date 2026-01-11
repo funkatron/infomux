@@ -6,9 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from infomux.job import InputFile, JobEnvelope, JobStatus, StepRecord
+from infomux.job import InputFile, JobEnvelope, StepRecord
 from infomux.pipeline import get_resumable_steps
 
 

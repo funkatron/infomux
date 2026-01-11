@@ -4,10 +4,6 @@ Tests for the CLI module.
 
 from __future__ import annotations
 
-import sys
-from io import StringIO
-from unittest.mock import patch
-
 import pytest
 
 from infomux.cli import create_parser, main
