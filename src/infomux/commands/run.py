@@ -113,7 +113,14 @@ def execute(args: Namespace) -> int:
         logger.error(str(e))
         return 1
 
-    logger.info("using pipeline: %s", pipeline.name)
+    if args.pipeline is None:
+        logger.info(
+            "using default pipeline '%s' (%s)",
+            pipeline.name,
+            " → ".join(pipeline.step_names()),
+        )
+    else:
+        logger.info("using pipeline: %s", pipeline.name)
 
     # Create input file metadata
     try:
