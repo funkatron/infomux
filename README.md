@@ -1,42 +1,78 @@
 # infomux
 
-A local-first, deterministic media pipeline CLI.
+A local-first CLI for transcribing audio/video and capturing voice notes.
 
-```
+**What it does:**
+- Transcribe any audio/video file to text
+- Record voice notes from your microphone with live transcription
+- Generate summaries using local LLMs (Ollama)
+- Keep everything on your machine — no cloud, no API keys
+
+```bash
+# Transcribe a podcast
 infomux run podcast.mp4
-# → ~/.local/share/infomux/runs/run-20260111-020549-c36c19/
-#   ├── job.json
-#   ├── audio.wav
-#   └── transcript.txt
+# → transcript.txt
+
+# Record a voice note
+infomux stream
+# → audio.wav + transcript with word-level timestamps
+
+# Summarize a meeting
+infomux run --pipeline summarize meeting.mp4
+# → transcript.txt + summary.md
 ```
+
+---
+
+## Requirements
+
+- **macOS** (tested) or **Linux** (should work, see notes)
+- **Python 3.11+**
+- **ffmpeg** and **whisper-cpp** (whisper.cpp)
+
+### Platform Notes
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| macOS (Apple Silicon) | ✅ Tested | Metal acceleration, fastest transcription |
+| macOS (Intel) | ✅ Should work | No Metal, slower |
+| Linux | 🔶 Untested | Needs `alsa`/`pulseaudio` for streaming; build whisper-cpp from source |
+| Windows | ❌ Not supported | PRs welcome |
+
+On Linux, install dependencies via your package manager instead of Homebrew, and build [whisper.cpp](https://github.com/ggerganov/whisper.cpp) from source.
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Install dependencies
+# 1. Clone the repo
+git clone https://github.com/funkatron/infomux.git
+cd infomux
+
+# 2. Install system dependencies
 brew install ffmpeg whisper-cpp
 
-# 2. Download whisper model (~142 MB)
+# 3. Download whisper model (~142 MB)
 mkdir -p ~/.local/share/infomux/models/whisper
 curl -L -o ~/.local/share/infomux/models/whisper/ggml-base.en.bin \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
 
-# 3. Set model path (add to ~/.zshrc)
+# 4. Set model path (add to ~/.zshrc for persistence)
 export INFOMUX_WHISPER_MODEL="$HOME/.local/share/infomux/models/whisper/ggml-base.en.bin"
 
-# 4. Install infomux
-cd infomux
+# 5. Install infomux (using uv, or pip)
 uv venv --python 3.11 && source .venv/bin/activate
 uv pip install -e .
 
-# 5. Verify setup
+# 6. Verify everything works
 infomux run --check-deps
 
-# 6. Run on a media file
-infomux run your-file.mp4
+# 7. Transcribe something!
+infomux run your-podcast.mp4
 ```
+
+> **Tip:** For summarization, also install [Ollama](https://ollama.ai) and run `ollama pull qwen2.5:7b-instruct`
 
 ---
 
@@ -214,7 +250,21 @@ Stopping: stop word 'stop recording'
 
 ---
 
-## Pipeline Steps
+## Pipelines
+
+### Available Pipelines
+
+| Pipeline | Steps | Requires |
+|----------|-------|----------|
+| `transcribe` (default) | extract_audio → transcribe | ffmpeg, whisper-cli |
+| `summarize` | extract_audio → transcribe → summarize | ffmpeg, whisper-cli, Ollama |
+
+```bash
+# List available pipelines
+infomux run --list-pipelines
+```
+
+### Steps
 
 | Step | Input | Output | Tool |
 |------|-------|--------|------|
@@ -222,10 +272,12 @@ Stopping: stop word 'stop recording'
 | `transcribe` | `audio.wav` | `transcript.txt` | whisper-cli |
 | `summarize` | `transcript.txt` | `summary.md` | Ollama |
 
-### Default Pipeline
+### Data Flow
 
 ```
 input.mp4 → [extract_audio] → audio.wav → [transcribe] → transcript.txt
+                                                ↓
+                                          [summarize] → summary.md
 ```
 
 ---
@@ -354,6 +406,32 @@ whisper-cpp from Homebrew includes Metal support. If transcription is slow, ensu
 which whisper-cli
 # Should show: /opt/homebrew/bin/whisper-cli
 ```
+
+### `Ollama not running` (for summarization)
+
+The `summarize` pipeline requires Ollama:
+
+```bash
+# Install Ollama
+brew install ollama
+
+# Start the server
+ollama serve
+
+# Pull a model (in another terminal)
+ollama pull qwen2.5:7b-instruct
+```
+
+### `No audio devices found` (for streaming)
+
+Ensure your microphone is connected and permissions are granted:
+
+```bash
+# List available devices
+infomux stream --list-devices
+```
+
+On macOS, you may need to grant Terminal/your IDE microphone access in System Preferences → Privacy & Security → Microphone.
 
 ---
 
