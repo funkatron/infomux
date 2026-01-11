@@ -135,6 +135,22 @@ SUMMARIZE_PIPELINE = PipelineDef(
     ],
 )
 
+# Timed transcription: word-level timestamps without video embedding
+TIMED_PIPELINE = PipelineDef(
+    name="timed",
+    description="Transcribe with word-level timestamps (SRT/VTT/JSON)",
+    steps=[
+        StepDef(
+            name="extract_audio",
+            input_from=None,
+        ),
+        StepDef(
+            name="transcribe_timed",
+            input_from="extract_audio",
+        ),
+    ],
+)
+
 # Caption pipeline: transcribe with timing and embed subtitles
 CAPTION_PIPELINE = PipelineDef(
     name="caption",
@@ -156,11 +172,34 @@ CAPTION_PIPELINE = PipelineDef(
     ],
 )
 
+# Caption with burn-in: permanently render subtitles into video
+CAPTION_BURN_PIPELINE = PipelineDef(
+    name="caption-burn",
+    description="Transcribe and burn subtitles permanently into video",
+    steps=[
+        StepDef(
+            name="extract_audio",
+            input_from=None,
+        ),
+        StepDef(
+            name="transcribe_timed",
+            input_from="extract_audio",
+        ),
+        StepDef(
+            name="embed_subs",
+            input_from=None,
+            config={"burn_in": True},  # Permanent subtitles
+        ),
+    ],
+)
+
 # Available pipelines
 PIPELINES: dict[str, PipelineDef] = {
     "transcribe": DEFAULT_PIPELINE,
     "summarize": SUMMARIZE_PIPELINE,
+    "timed": TIMED_PIPELINE,
     "caption": CAPTION_PIPELINE,
+    "caption-burn": CAPTION_BURN_PIPELINE,
 }
 
 

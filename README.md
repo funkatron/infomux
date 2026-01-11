@@ -295,11 +295,13 @@ Stopping: stop word 'stop recording'
 
 ### Available Pipelines
 
-| Pipeline | Steps | Requires |
-|----------|-------|----------|
-| `transcribe` (default) | extract_audio → transcribe | ffmpeg, whisper-cli |
-| `summarize` | extract_audio → transcribe → summarize | ffmpeg, whisper-cli, Ollama |
-| `caption` | extract_audio → transcribe_timed → embed_subs | ffmpeg, whisper-cli |
+| Pipeline | Description | Steps |
+|----------|-------------|-------|
+| `transcribe` | Plain text transcript (default) | extract_audio → transcribe |
+| `summarize` | Transcript + LLM summary | extract_audio → transcribe → summarize |
+| `timed` | Word-level timestamps (SRT/VTT/JSON) | extract_audio → transcribe_timed |
+| `caption` | Soft subtitles (toggleable) | extract_audio → transcribe_timed → embed_subs |
+| `caption-burn` | Burned-in subtitles (permanent) | extract_audio → transcribe_timed → embed_subs |
 
 ```bash
 # List available pipelines
