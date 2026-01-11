@@ -9,17 +9,25 @@ A local-first CLI for transcribing audio/video and capturing voice notes.
 - Keep everything on your machine — no cloud, no API keys
 
 ```bash
-# Transcribe a podcast
-infomux run podcast.mp4
-# → transcript.txt
+# Transcribe a podcast episode
+infomux run ~/Downloads/episode-42.mp3
+# → ~/.local/share/infomux/runs/run-XXXXXX/transcript.txt
 
-# Record a voice note
-infomux stream
-# → audio.wav + transcript with word-level timestamps
+# Record a voice memo with timestamps
+infomux stream --duration 300
+# → audio.wav + transcript.srt/vtt/json
 
-# Summarize a meeting
-infomux run --pipeline summarize meeting.mp4
+# Get summary of a meeting recording
+infomux run --pipeline summarize zoom-call.mp4
 # → transcript.txt + summary.md
+
+# Add subtitles to a music video
+infomux run --pipeline caption my-song.mp4
+# → video with embedded toggleable subtitles
+
+# Full analysis: transcript + timestamps + summary + database
+infomux run --pipeline report-store interview.m4a
+# → all outputs + indexed in searchable SQLite
 ```
 
 ---
@@ -145,28 +153,38 @@ It processes media files through well-defined pipeline steps, producing derived 
 Process a media file through a pipeline.
 
 ```bash
-# Basic usage (uses default 'transcribe' pipeline)
-infomux run input.mp4
+# Transcribe an audio file (uses default 'transcribe' pipeline)
+infomux run ~/Music/interview.m4a
 
-# Verbose logging
-infomux -v run input.mp4
+# Transcribe a video, extract audio automatically
+infomux run ~/Movies/lecture.mp4
 
-# Specify a pipeline
-infomux run --pipeline transcribe input.mp4
-infomux run --pipeline summarize input.mp4
-infomux run --pipeline caption music_video.mp4  # → video with embedded subtitles
+# Get a summary of a long recording
+infomux run --pipeline summarize 3hr-meeting.mp4
 
-# List available pipelines
+# Create subtitles for a video (soft subs, toggleable)
+infomux run --pipeline caption my-music-video.mp4
+
+# Burn subtitles into video permanently
+infomux run --pipeline caption-burn tutorial.mp4
+
+# Get word-level timestamps without video
+infomux run --pipeline timed podcast.mp3
+
+# Full analysis with searchable database
+infomux run --pipeline report-store weekly-standup.mp4
+
+# List all available pipelines
 infomux run --list-pipelines
 
-# Run specific steps only (subset of pipeline)
-infomux run --steps extract_audio input.mp4
+# Preview what would happen (no actual processing)
+infomux run --dry-run my-file.mp4
 
-# Preview without executing
-infomux run --dry-run input.mp4
-
-# Check dependencies
+# Check that ffmpeg, whisper-cli, and model are installed
 infomux run --check-deps
+
+# Verbose logging (shows debug output)
+infomux -v run my-file.mp4
 ```
 
 **Output:** Prints the run directory path to stdout.
@@ -176,14 +194,17 @@ infomux run --check-deps
 View details of a completed run.
 
 ```bash
-# List all runs (most recent first)
+# List recent runs
 infomux inspect --list
 
-# Human-readable summary
+# View a specific run (tab-complete the run ID)
 infomux inspect run-20260111-020549-c36c19
 
-# JSON output (for scripting)
+# Get JSON for scripting/automation
 infomux inspect --json run-20260111-020549-c36c19
+
+# Pipe to jq for specific fields
+infomux inspect --json run-XXXXX | jq '.artifacts'
 ```
 
 **Example output:**
@@ -215,14 +236,18 @@ Artifacts:
 Resume an interrupted or failed run, or re-run specific steps.
 
 ```bash
-# Resume from first incomplete step
-infomux resume <run-id>
+# Resume a failed/interrupted run
+infomux resume run-20260111-020549-c36c19
 
-# Re-run from a specific step (and all following)
-infomux resume --from-step transcribe <run-id>
+# Re-run transcription (e.g., after updating whisper model)
+infomux resume --from-step transcribe run-XXXXX
 
-# Preview what would run
-infomux resume --dry-run <run-id>
+# Re-generate summary with different Ollama model
+export INFOMUX_OLLAMA_MODEL=llama3:8b
+infomux resume --from-step summarize run-XXXXX
+
+# Preview what would be re-run
+infomux resume --dry-run run-XXXXX
 ```
 
 **Behavior:**
@@ -236,26 +261,32 @@ infomux resume --dry-run <run-id>
 Real-time audio capture and transcription from a microphone.
 
 ```bash
-# List available audio devices
+# See available microphones
 infomux stream --list-devices
 
-# Interactive device selection
+# Record with interactive device picker
 infomux stream
 
-# Use a specific device
-infomux stream --device 3
+# Use a specific microphone (by ID from --list-devices)
+infomux stream --device 2
 
-# Stop after 60 seconds
-infomux stream --duration 60
+# 5-minute voice memo
+infomux stream --duration 300
 
-# Stop after 10 seconds of silence
-infomux stream --silence 10
+# Auto-stop after 5 seconds of silence (great for dictation)
+infomux stream --silence 5
 
-# Stop when phrase detected (default: "stop recording")
-infomux stream --stop-word "end session"
+# Custom stop phrase
+infomux stream --stop-word "end note"
 
-# Combine options
-infomux stream --device 3 --duration 120 --silence 10
+# Voice memo with summarization
+infomux stream --pipeline summarize
+
+# Meeting notes with auto-silence detection
+infomux stream --device 2 --silence 10 --pipeline summarize
+
+# Show available pipelines for stream
+infomux stream --list-pipelines
 ```
 
 **Stop conditions:**
