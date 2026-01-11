@@ -223,8 +223,10 @@ class StorePostgresStep:
             logger.info("stored run: %s", run_data.run_id)
             return []
 
-        except Exception as e:
+        except psycopg2.Error as e:
             raise StepError(self.name, f"database error: {e}")
+        except OSError as e:
+            raise StepError(self.name, f"connection error: {e}")
 
 
 def run(input_path: Path, output_dir: Path) -> StepResult:
@@ -308,5 +310,9 @@ def search_transcripts(query: str, limit: int = 10) -> list[dict]:
             ]
         conn.close()
         return results
-    except Exception:
+    except psycopg2.Error as e:
+        logger.warning("PostgreSQL search failed: %s", e)
+        return []
+    except OSError as e:
+        logger.warning("PostgreSQL connection failed: %s", e)
         return []

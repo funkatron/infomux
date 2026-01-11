@@ -117,15 +117,13 @@ class SummarizeStep:
         prompt = f"Please summarize the following transcript:\n\n{transcript}"
 
         # Call Ollama API
-        try:
-            response_text, output_tokens = self._call_ollama(
-                ollama_url,
-                model_name,
-                prompt,
-                params,
-            )
-        except Exception as e:
-            raise StepError(self.name, f"ollama error: {e}")
+        # _call_ollama raises StepError on failure
+        response_text, output_tokens = self._call_ollama(
+            ollama_url,
+            model_name,
+            prompt,
+            params,
+        )
 
         # Write output
         output_path = output_dir / SUMMARY_FILENAME

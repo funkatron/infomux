@@ -189,8 +189,9 @@ def _discover_steps() -> None:
 
         except ImportError as e:
             # Log but don't fail - step just won't be available
-            import sys
-            print(f"Warning: failed to import step {module_name}: {e}", file=sys.stderr)
+            from infomux.log import get_logger
+            _logger = get_logger(__name__)
+            _logger.debug("failed to import step %s: %s", module_name, e)
 
     _discovered = True
 
