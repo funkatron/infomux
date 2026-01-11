@@ -217,6 +217,34 @@ REPORT_PIPELINE = PipelineDef(
     ],
 )
 
+# Report with storage: full analysis saved to SQLite
+REPORT_STORE_PIPELINE = PipelineDef(
+    name="report-store",
+    description="Full analysis stored in searchable SQLite database",
+    steps=[
+        StepDef(
+            name="extract_audio",
+            input_from=None,
+        ),
+        StepDef(
+            name="transcribe",
+            input_from="extract_audio",
+        ),
+        StepDef(
+            name="transcribe_timed",
+            input_from="extract_audio",
+        ),
+        StepDef(
+            name="summarize",
+            input_from="transcribe",
+        ),
+        StepDef(
+            name="store_sqlite",
+            input_from=None,  # Reads from run directory
+        ),
+    ],
+)
+
 # Available pipelines
 PIPELINES: dict[str, PipelineDef] = {
     "transcribe": DEFAULT_PIPELINE,
@@ -225,6 +253,7 @@ PIPELINES: dict[str, PipelineDef] = {
     "caption": CAPTION_PIPELINE,
     "caption-burn": CAPTION_BURN_PIPELINE,
     "report": REPORT_PIPELINE,
+    "report-store": REPORT_STORE_PIPELINE,
 }
 
 

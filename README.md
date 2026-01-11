@@ -300,7 +300,8 @@ Stopping: stop word 'stop recording'
 | `transcribe` | Plain text transcript (default) | extract_audio → transcribe |
 | `summarize` | Transcript + LLM summary | extract_audio → transcribe → summarize |
 | `timed` | Word-level timestamps (SRT/VTT/JSON) | extract_audio → transcribe_timed |
-| `report` | Full analysis: text, timestamps, summary | extract_audio → transcribe → transcribe_timed → summarize |
+| `report` | Full analysis: text, timestamps, summary | ... → transcribe → transcribe_timed → summarize |
+| `report-store` | Full analysis + searchable database | ... → summarize → store_sqlite |
 | `caption` | Soft subtitles (toggleable) | extract_audio → transcribe_timed → embed_subs |
 | `caption-burn` | Burned-in subtitles (permanent) | extract_audio → transcribe_timed → embed_subs |
 
@@ -318,6 +319,7 @@ infomux run --list-pipelines
 | `transcribe_timed` | `audio.wav` | `transcript.srt`, `.vtt`, `.json` | whisper-cli -dtw |
 | `summarize` | `transcript.txt` | `summary.md` | Ollama |
 | `embed_subs` | video + `.srt` | `video_captioned.mp4` | ffmpeg |
+| `store_sqlite` | run directory | → `infomux.db` | sqlite3 |
 
 ### Data Flow
 
@@ -336,6 +338,66 @@ input.mp4 → [extract_audio] → audio.wav → [transcribe_timed] → transcrip
     └───────────────────────────────────→ [embed_subs] ←─────────────────┘
                                                ↓
                                     video_captioned.mp4 (with soft subtitles)
+```
+
+### Pipeline Artifacts
+
+Each pipeline produces different output files:
+
+**`transcribe`** (default)
+```
+├── audio.wav          # 16kHz mono audio
+├── transcript.txt     # Plain text transcript
+└── job.json
+```
+
+**`timed`**
+```
+├── audio.wav
+├── transcript.srt     # SRT subtitles
+├── transcript.vtt     # VTT subtitles
+├── transcript.json    # Word-level timestamps
+└── job.json
+```
+
+**`summarize`**
+```
+├── audio.wav
+├── transcript.txt
+├── summary.md         # LLM-generated summary
+└── job.json
+```
+
+**`report`** (full analysis)
+```
+├── audio.wav
+├── transcript.txt     # Plain text
+├── transcript.srt     # SRT subtitles
+├── transcript.vtt     # VTT subtitles  
+├── transcript.json    # Word-level timestamps
+├── summary.md         # LLM summary
+└── job.json
+```
+
+**`report-store`** (full analysis + database)
+```
+├── (same as report)
+└── → ~/.local/share/infomux/infomux.db  # Searchable database
+```
+
+The SQLite database enables:
+- Full-text search across all transcripts
+- Segment-level queries with timestamps
+- Summary aggregation across runs
+
+**`caption`** / **`caption-burn`**
+```
+├── audio.wav
+├── transcript.srt
+├── transcript.vtt
+├── transcript.json
+├── video_captioned.mp4  # Video with subtitles
+└── job.json
 ```
 
 ---
