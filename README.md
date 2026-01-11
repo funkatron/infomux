@@ -36,10 +36,18 @@ infomux run --pipeline summarize meeting.mp4
 |----------|--------|-------|
 | macOS (Apple Silicon) | ✅ Tested | Metal acceleration, fastest transcription |
 | macOS (Intel) | ✅ Should work | No Metal, slower |
-| Linux | 🔶 Untested | Needs `alsa`/`pulseaudio` for streaming; build whisper-cpp from source |
+| Linux | 🔶 Untested | See known issues below |
 | Windows | ❌ Not supported | PRs welcome |
 
-On Linux, install dependencies via your package manager instead of Homebrew, and build [whisper.cpp](https://github.com/ggerganov/whisper.cpp) from source.
+**Linux known issues:**
+
+1. **Audio device discovery** — Uses `ffmpeg -f avfoundation` which is macOS-only. Linux needs `-f alsa` or `-f pulse`. The `audio.py` module would need platform detection.
+
+2. **whisper-cpp** — Not in most package managers. Build from [source](https://github.com/ggerganov/whisper.cpp) or use a PPA/AUR package.
+
+3. **whisper-stream** — May need different audio backend flags for ALSA/PulseAudio.
+
+Core functionality (`infomux run` for file transcription) should work if whisper-cli and ffmpeg are installed.
 
 ---
 
