@@ -38,6 +38,7 @@ logger = get_logger(__name__)
 # Environment variables
 ENV_OLLAMA_MODEL = "INFOMUX_OLLAMA_MODEL"
 ENV_OLLAMA_URL = "INFOMUX_OLLAMA_URL"
+ENV_CONTENT_TYPE_HINT = "INFOMUX_CONTENT_TYPE_HINT"
 
 # Defaults
 DEFAULT_MODEL = "llama3.1:8b"
@@ -47,35 +48,53 @@ DEFAULT_OLLAMA_URL = "http://localhost:11434"
 SUMMARY_FILENAME = "summary.md"
 
 # System prompt for summarization
-SUMMARIZE_SYSTEM_PROMPT = """You extract actionable information from transcripts of meetings, calls, and recordings.
+SUMMARIZE_SYSTEM_PROMPT = """You extract key information from transcripts of audio/video recordings.
 
-Output format (use ALL sections, write "None" if empty):
+Output format (use ALL sections, write "None identified" if empty):
 
 ## Overview
-One sentence: what this recording is, who is present, and when (if mentioned).
+One sentence: what this recording is, who is speaking/present, and when (if mentioned).
 
 ## Action Items
+CRITICAL: Extract EVERY task, to-do, or commitment mentioned. Never skip action items.
 - [ ] **[Person]**: [Task] (due: [date if mentioned])
-- [ ] **[Person]**: [Task]
+
+## Key Takeaways
+Main insights, lessons, or important points from the content.
+- [Specific takeaway with context]
 
 ## Decisions Made
-- [Decision with context]
+- [Decision with context/reasoning]
 
 ## Dates & Events Mentioned
-- [Date]: [Event/deadline/meeting]
+- [Date]: [Event/deadline/meeting/reference]
 
-## Key Points
-- [Specific point with names and details]
+## People Mentioned
+- **[Name]**: [Role or context]
+
+## Notable Quotes
+Memorable or important statements worth preserving.
+- "[Quote]" - [Speaker if known]
 
 ## Open Questions / Follow-ups
 - [Unresolved question or topic needing follow-up]
 
 Rules:
-- Extract EVERY action item, decision, and date mentioned
+- Analyze the ENTIRE transcript from beginning to end
+- Extract EVERY action item - this is the most important requirement
 - Use exact names from the transcript
-- Be specific: "John will send the report" not "someone will send something"
-- Include context for decisions (why it was decided)
-- If a date/time is mentioned, capture it"""
+- Be specific with details, names, and numbers
+- Adapt emphasis based on content type (meeting vs talk vs interview)"""
+
+# Content type templates for the hint system
+CONTENT_TYPE_HINTS = {
+    "meeting": "This is a work meeting. Focus on: action items, decisions, assignments, deadlines.",
+    "talk": "This is a conference talk or presentation. Focus on: key concepts, takeaways, quotes.",
+    "podcast": "This is a podcast or interview. Focus on: main topics, guest insights, recommendations.",
+    "lecture": "This is an educational lecture. Focus on: concepts taught, examples, key definitions.",
+    "standup": "This is a standup or status meeting. Focus on: blockers, progress updates, next steps.",
+    "1on1": "This is a 1-on-1 meeting. Focus on: feedback, goals, action items, concerns raised.",
+}
 
 
 @register_step
@@ -110,6 +129,7 @@ class SummarizeStep:
         # Get configuration
         model_name = self.model or os.environ.get(ENV_OLLAMA_MODEL, DEFAULT_MODEL)
         ollama_url = os.environ.get(ENV_OLLAMA_URL, DEFAULT_OLLAMA_URL)
+        content_hint = os.environ.get(ENV_CONTENT_TYPE_HINT, "")
 
         # Get or create generation params with seed
         params = self.params or DEFAULT_SUMMARIZE_PARAMS
@@ -126,6 +146,8 @@ class SummarizeStep:
         logger.info("summarizing transcript (%d chars)", len(transcript))
         logger.debug("using model: %s", model_name)
         logger.debug("using seed: %d", params.seed)
+        if content_hint:
+            logger.debug("content type hint: %s", content_hint)
 
         # Create model record for reproducibility
         model_info = ModelInfo(
@@ -133,9 +155,20 @@ class SummarizeStep:
             provider="ollama",
         )
 
-        # Build the prompt
-        prompt = f"""Extract actionable information from this transcript using the EXACT format below.
+        # Build content type context
+        content_context = ""
+        if content_hint:
+            # Check if it's a known type with a template
+            if content_hint.lower() in CONTENT_TYPE_HINTS:
+                content_context = CONTENT_TYPE_HINTS[content_hint.lower()]
+            else:
+                # Use the hint directly as a description
+                content_context = f"Content type: {content_hint}"
+            content_context = f"\n\nCONTENT CONTEXT: {content_context}\n"
 
+        # Build the prompt
+        prompt = f"""Extract key information from this transcript using the EXACT format below.
+{content_context}
 TRANSCRIPT:
 {transcript}
 
@@ -147,7 +180,17 @@ Now provide the structured summary. Use EXACTLY these headings:
 
 ## Action Items
 
+## Key Takeaways
+
 ## Decisions Made
+
+## Dates & Events Mentioned
+
+## People Mentioned
+
+## Notable Quotes
+
+## Open Questions / Follow-ups
 
 ## Dates & Events Mentioned
 

@@ -75,6 +75,13 @@ def configure_parser(parser: ArgumentParser) -> None:
         default=None,
         help="Ollama model for summarization (e.g., qwen2.5:32b-instruct)",
     )
+    parser.add_argument(
+        "--content-type-hint",
+        type=str,
+        default=None,
+        metavar="TYPE",
+        help="Hint for content type: meeting, talk, podcast, lecture, standup, 1on1, or custom",
+    )
 
 
 def execute(args: Namespace) -> int:
@@ -190,6 +197,12 @@ def execute(args: Namespace) -> int:
         import os
         os.environ["INFOMUX_OLLAMA_MODEL"] = args.model
         logger.debug("using model: %s", args.model)
+
+    # Set content type hint if specified
+    if args.content_type_hint:
+        import os
+        os.environ["INFOMUX_CONTENT_TYPE_HINT"] = args.content_type_hint
+        logger.debug("content type hint: %s", args.content_type_hint)
 
     # Execute pipeline
     success = run_pipeline(job, run_dir, pipeline=pipeline, step_names=step_names)
