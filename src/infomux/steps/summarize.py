@@ -47,18 +47,35 @@ DEFAULT_OLLAMA_URL = "http://localhost:11434"
 SUMMARY_FILENAME = "summary.md"
 
 # System prompt for summarization
-SUMMARIZE_SYSTEM_PROMPT = """You summarize transcripts of audio and video recordings.
+SUMMARIZE_SYSTEM_PROMPT = """You extract actionable information from transcripts of meetings, calls, and recordings.
 
-Output format:
-1. First line: One sentence describing what this recording is (e.g., "A conference talk by [Name] about [Topic]")
-2. Main points as bullet list
-3. Key quotes or notable moments (if any)
+Output format (use ALL sections, write "None" if empty):
+
+## Overview
+One sentence: what this recording is, who is present, and when (if mentioned).
+
+## Action Items
+- [ ] **[Person]**: [Task] (due: [date if mentioned])
+- [ ] **[Person]**: [Task]
+
+## Decisions Made
+- [Decision with context]
+
+## Dates & Events Mentioned
+- [Date]: [Event/deadline/meeting]
+
+## Key Points
+- [Specific point with names and details]
+
+## Open Questions / Follow-ups
+- [Unresolved question or topic needing follow-up]
 
 Rules:
-- Be factual and specific - use names, numbers, and details from the transcript
-- Do not editorialize or add commentary
-- Do not use phrases like "the speaker discusses" - just state the content
-- Write in present tense"""
+- Extract EVERY action item, decision, and date mentioned
+- Use exact names from the transcript
+- Be specific: "John will send the report" not "someone will send something"
+- Include context for decisions (why it was decided)
+- If a date/time is mentioned, capture it"""
 
 
 @register_step
@@ -117,12 +134,26 @@ class SummarizeStep:
         )
 
         # Build the prompt
-        prompt = f"""Summarize this transcript of a recording.
+        prompt = f"""Extract actionable information from this transcript using the EXACT format below.
 
 TRANSCRIPT:
 {transcript}
 
-SUMMARY:"""
+---
+
+Now provide the structured summary. Use EXACTLY these headings:
+
+## Overview
+
+## Action Items
+
+## Decisions Made
+
+## Dates & Events Mentioned
+
+## Key Points
+
+## Open Questions / Follow-ups"""
 
         # Call Ollama API
         # _call_ollama raises StepError on failure
