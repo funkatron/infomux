@@ -88,7 +88,11 @@ infomux run --check-deps
 infomux run your-podcast.mp4
 ```
 
-> **Tip:** For summarization, also install [Ollama](https://ollama.ai) and run `ollama pull qwen2.5:7b-instruct`
+> **Tip:** For summarization, install [Ollama](https://ollama.ai) and pull a model:
+> ```bash
+> ollama pull llama3.1:8b          # Default, 8GB RAM
+> ollama pull qwen2.5:32b-instruct  # Better quality, 20GB RAM
+> ```
 
 ---
 
@@ -569,7 +573,7 @@ infomux run --pipeline summarize --content-type-hint "quarterly review" recordin
 
 **Long Transcript Handling**
 
-Transcripts over 15,000 characters are automatically chunked and processed in parallel sections to ensure full coverage. You'll see progress like:
+Transcripts over 15,000 characters are automatically chunked and processed sequentially to ensure full coverage. You'll see progress like:
 
 ```
 chunk 1/4 (0%)
@@ -694,32 +698,45 @@ src/infomux/
 
 ### ✅ Implemented
 
-- CLI scaffold with `run`, `inspect`, `resume`, `stream` subcommands
+**Core:**
+- CLI with `run`, `inspect`, `resume`, `stream` subcommands
 - Job envelope with input hashing, step timing, artifact tracking
 - Run storage under `~/.local/share/infomux/runs/`
-- `extract_audio` step (ffmpeg → 16kHz mono WAV)
-- `transcribe` step (whisper-cli → transcript.txt)
-- `summarize` step (Ollama → summary.md)
 - Pipeline definitions as data (`PipelineDef`, `StepDef`)
-- Step input/output dependency resolution
-- `--pipeline` and `--list-pipelines` flags
-- `--steps` flag for running specific steps
-- `resume` command with `--from-step` support
-- Dependency checking (`--check-deps`)
-- Dry-run mode (`--dry-run`)
-- Logging to stderr
-- Model/seed recording for reproducibility
-- `stream` command for real-time audio capture
-- Word-level timestamps via whisper-cli post-processing
+- Auto-discovery of steps from `steps/` directory
+- `--pipeline`, `--list-pipelines`, `--steps`, `--dry-run`, `--check-deps` flags
+
+**Steps:**
+- `extract_audio` — ffmpeg → 16kHz mono WAV
+- `transcribe` — whisper-cli → transcript.txt
+- `transcribe_timed` — whisper-cli -dtw → .srt/.vtt/.json
+- `summarize` — Ollama with chunking, content hints, `--model` override
+- `embed_subs` — ffmpeg subtitle embedding (soft or burned)
+- `store_json`, `store_markdown` — export formats
+- `store_sqlite` — searchable FTS5 database
+- `store_s3`, `store_postgres` — cloud storage
+- `store_obsidian`, `store_bear` — note app integration
+
+**Pipelines:**
+- `transcribe`, `summarize`, `timed`, `report`, `report-store`
+- `caption`, `caption-burn` — video subtitle embedding
+
+**Streaming:**
+- Real-time audio capture and transcription
 - Multiple stop conditions (duration, silence, stop-word)
 - Audio device discovery and selection
+
+**Reproducibility:**
+- Model/seed recording for LLM outputs
+- Input file hashing (SHA-256)
+- Full execution trace in job.json
 
 ### ❌ Planned
 
 - **Frame extraction** — Key frames from video
 - **Custom pipelines** — Load from YAML/JSON config file
 - **Model auto-download** — `infomux setup` command
-- **Progress reporting** — Real-time step progress
+- **Parallel chunk processing** — Speed up long transcript summarization
 
 ---
 
