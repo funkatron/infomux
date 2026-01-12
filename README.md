@@ -162,6 +162,12 @@ infomux run ~/Movies/lecture.mp4
 # Get a summary of a long recording
 infomux run --pipeline summarize 3hr-meeting.mp4
 
+# Summarize with smarter model and content hint
+infomux run --pipeline summarize --model qwen2.5:32b-instruct --content-type-hint meeting standup.mp4
+
+# Summarize a conference talk (adapts output for key takeaways)
+infomux run --pipeline summarize --content-type-hint talk keynote.mp4
+
 # Create subtitles for a video (soft subs, toggleable)
 infomux run --pipeline caption my-music-video.mp4
 
@@ -243,8 +249,11 @@ infomux resume run-20260111-020549-c36c19
 infomux resume --from-step transcribe run-XXXXX
 
 # Re-generate summary with different Ollama model
-export INFOMUX_OLLAMA_MODEL=llama3:8b
-infomux resume --from-step summarize run-XXXXX
+infomux resume --from-step summarize --model qwen2.5:32b-instruct run-XXXXX
+
+# Re-summarize with content type hint (adapts output format)
+infomux resume --from-step summarize --content-type-hint meeting run-XXXXX
+infomux resume --from-step summarize --content-type-hint talk run-XXXXX
 
 # Preview what would be re-run
 infomux resume --dry-run run-XXXXX
@@ -516,8 +525,9 @@ Every run produces a complete execution record:
 | `INFOMUX_WHISPER_MODEL` | Path to GGML whisper model file | `$INFOMUX_DATA_DIR/models/whisper/ggml-base.en.bin` |
 | `INFOMUX_FFMPEG_PATH` | Override ffmpeg binary location | *(auto-detected from PATH)* |
 | `INFOMUX_WHISPER_CLI_PATH` | Override whisper-cli binary location | *(auto-detected from PATH)* |
-| `INFOMUX_OLLAMA_MODEL` | Ollama model for summarization | `qwen2.5:7b-instruct` |
+| `INFOMUX_OLLAMA_MODEL` | Ollama model for summarization | `llama3.1:8b` |
 | `INFOMUX_OLLAMA_URL` | Ollama API URL | `http://localhost:11434` |
+| `INFOMUX_CONTENT_TYPE_HINT` | Hint for content type (meeting, talk, etc.) | *(none)* |
 | `INFOMUX_S3_BUCKET` | S3 bucket for `store_s3` | *(required if using S3)* |
 | `INFOMUX_S3_PREFIX` | S3 key prefix | `infomux/` |
 | `INFOMUX_POSTGRES_URL` | PostgreSQL connection URL for `store_postgres` | *(required if using PG)* |
