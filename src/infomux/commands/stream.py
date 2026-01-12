@@ -106,6 +106,13 @@ def configure_parser(parser: ArgumentParser) -> None:
         action="store_true",
         help="List available pipelines and exit",
     )
+    parser.add_argument(
+        "--model",
+        "-m",
+        type=str,
+        default=None,
+        help="Ollama model for summarization (e.g., qwen2.5:32b-instruct)",
+    )
 
 
 class StreamMonitor:
@@ -347,6 +354,12 @@ def execute(args: Namespace) -> int:
 
                 # Update job with input info for pipeline
                 job.input = InputFile.from_path(audio_file)
+
+                # Set model override if specified
+                if args.model:
+                    import os
+                    os.environ["INFOMUX_OLLAMA_MODEL"] = args.model
+                    logger.debug("using model: %s", args.model)
 
                 # Run pipeline (skip steps that don't apply to audio-only)
                 skip_steps = {"extract_audio", "embed_subs"}  # No video input

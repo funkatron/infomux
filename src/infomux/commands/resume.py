@@ -47,6 +47,13 @@ def configure_parser(parser: ArgumentParser) -> None:
         action="store_true",
         help="Show what would be done without executing",
     )
+    parser.add_argument(
+        "--model",
+        "-m",
+        type=str,
+        default=None,
+        help="Ollama model for summarization (e.g., qwen2.5:32b-instruct)",
+    )
 
 
 def execute(args: Namespace) -> int:
@@ -131,6 +138,12 @@ def execute(args: Namespace) -> int:
 
     run_dir = get_run_dir(job.id)
     logger.debug("run directory: %s", run_dir)
+
+    # Set model override if specified
+    if args.model:
+        import os
+        os.environ["INFOMUX_OLLAMA_MODEL"] = args.model
+        logger.debug("using model: %s", args.model)
 
     # Execute the remaining steps
     success = run_pipeline(job, run_dir, pipeline=pipeline, step_names=steps_to_run)
