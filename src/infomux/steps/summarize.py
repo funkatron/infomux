@@ -389,12 +389,28 @@ Now provide the structured summary. Use EXACTLY these headings:
         total_chunks = len(chunks)
         logger.info("splitting into %d chunks for processing", total_chunks)
 
-        # Process each chunk
+        # Process each chunk with progress tracking
         chunk_summaries = []
         total_tokens = 0
+        chunk_times: list[float] = []
+        start_time = time.time()
 
         for i, chunk in enumerate(chunks, 1):
-            logger.info("processing chunk %d/%d (%d chars)", i, total_chunks, len(chunk))
+            chunk_start = time.time()
+            pct = int((i - 1) / total_chunks * 100)
+
+            # Estimate remaining time based on average chunk time
+            if chunk_times:
+                avg_time = sum(chunk_times) / len(chunk_times)
+                remaining = avg_time * (total_chunks - i + 1)
+                eta = f", ~{remaining:.0f}s remaining"
+            else:
+                eta = ""
+
+            logger.info(
+                "chunk %d/%d (%d%%)%s",
+                i, total_chunks, pct, eta
+            )
 
             prompt = CHUNK_EXTRACT_PROMPT.format(
                 chunk_num=i,
@@ -407,8 +423,16 @@ Now provide the structured summary. Use EXACTLY these headings:
             chunk_summaries.append(f"=== Section {i}/{total_chunks} ===\n{summary}")
             total_tokens += tokens
 
+            chunk_time = time.time() - chunk_start
+            chunk_times.append(chunk_time)
+            logger.debug("chunk %d completed in %.1fs", i, chunk_time)
+
         # Combine all chunk summaries
-        logger.info("combining %d chunk summaries", total_chunks)
+        elapsed = time.time() - start_time
+        logger.info(
+            "combining %d chunk summaries (extraction took %.1fs)",
+            total_chunks, elapsed
+        )
         combined_extracts = "\n\n".join(chunk_summaries)
 
         context_line = f"\n{content_context}\n" if content_context else ""
@@ -418,10 +442,18 @@ Now provide the structured summary. Use EXACTLY these headings:
             chunk_summaries=combined_extracts,
         )
 
+        combine_start = time.time()
         final_summary, final_tokens = self._call_ollama(
             ollama_url, model_name, combine_prompt, params
         )
         total_tokens += final_tokens
+        combine_time = time.time() - combine_start
+
+        total_elapsed = time.time() - start_time
+        logger.info(
+            "summarization complete: %.1fs total (combine: %.1fs)",
+            total_elapsed, combine_time
+        )
 
         return final_summary, total_tokens
 
