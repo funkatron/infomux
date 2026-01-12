@@ -16,28 +16,33 @@ This document explains the internal design of infomux for contributors and maint
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                           CLI Layer                             │
-│  cli.py → commands/{run,inspect,resume}.py                      │
+│  cli.py → commands/{run,inspect,resume,stream}.py               │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Pipeline Layer                           │
 │  pipeline.py — orchestrates step execution                      │
+│  pipeline_def.py — declarative pipeline definitions             │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Steps Layer                             │
-│  steps/{extract_audio,transcribe}.py — individual operations    │
+│  steps/__init__.py — auto-discovery, protocol, registry         │
+│  steps/*.py — individual step implementations                   │
+│  (13 steps: extract, transcribe, summarize, embed, stores...)   │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Core Layer                               │
-│  job.py — data structures                                       │
-│  storage.py — file I/O                                          │
-│  config.py — tool discovery                                     │
-│  log.py — logging                                               │
+│  job.py — JobEnvelope, StepRecord dataclasses                   │
+│  llm.py — ModelInfo, GenerationParams (reproducibility)         │
+│  storage.py — run directory management                          │
+│  config.py — tool/model discovery                               │
+│  audio.py — device enumeration                                  │
+│  log.py — stderr logging                                        │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -176,64 +181,208 @@ class StepResult:
 
 ## Adding a New Step
 
+Steps are auto-discovered from the `steps/` directory. Just create a module with a `@register_step` decorated class.
+
 ### 1. Create step module
 
 ```python
-# src/infomux/steps/summarize.py
+# src/infomux/steps/my_step.py
 
 from dataclasses import dataclass
 from pathlib import Path
 
-from infomux.steps import StepError, StepResult, register_step
+from infomux.steps import StepError, register_step
 
 @register_step
 @dataclass
-class SummarizeStep:
-    name: str = "summarize"
+class MyStep:
+    """
+    Docstring explaining what this step does.
+    """
+    name: str = "my_step"  # Must match the expected step name
 
     def execute(self, input_path: Path, output_dir: Path) -> list[Path]:
-        # Read transcript
-        transcript = input_path.read_text()
+        """
+        Execute the step.
 
-        # Generate summary (placeholder)
-        summary = f"Summary of {len(transcript)} characters..."
+        Args:
+            input_path: Path to input file (from previous step or original input)
+            output_dir: Run directory to write outputs
+
+        Returns:
+            List of output file paths
+
+        Raises:
+            StepError: If step fails
+        """
+        # Read input
+        content = input_path.read_text()
+
+        # Process (your logic here)
+        result = f"Processed: {len(content)} chars"
 
         # Write output
-        output_path = output_dir / "summary.md"
-        output_path.write_text(summary)
+        output_path = output_dir / "my_output.txt"
+        output_path.write_text(result)
 
         return [output_path]
 ```
 
-### 2. Register in pipeline
+### 2. Define output in step registry
+
+The step registry maps step names to their primary output files:
 
 ```python
-# src/infomux/pipeline.py
+# src/infomux/steps/__init__.py
 
-DEFAULT_STEPS = ["extract_audio", "transcribe", "summarize"]
-
-def _run_step(step_name: str, input_path: Path, output_dir: Path) -> StepResult:
-    # ...existing cases...
-    elif step_name == "summarize":
-        return run_summarize(input_path, output_dir)
+STEP_OUTPUTS = {
+    # ... existing steps ...
+    "my_step": "my_output.txt",
+}
 ```
 
-### 3. Add tests
+### 3. Add to a pipeline
 
 ```python
-# tests/test_steps.py
+# src/infomux/pipeline_def.py
 
-def test_summarize_step(tmp_path):
-    transcript = tmp_path / "transcript.txt"
-    transcript.write_text("Hello world")
+MY_PIPELINE = PipelineDef(
+    name="my_pipeline",
+    description="Does my custom processing",
+    steps=[
+        StepDef(name="extract_audio", input_from=None),
+        StepDef(name="transcribe", input_from="extract_audio"),
+        StepDef(name="my_step", input_from="transcribe"),
+    ],
+)
 
-    step = SummarizeStep()
-    outputs = step.execute(transcript, tmp_path)
-
-    assert len(outputs) == 1
-    assert outputs[0].name == "summary.md"
-    assert outputs[0].exists()
+# Register in PIPELINES dict
+PIPELINES["my_pipeline"] = MY_PIPELINE
 ```
+
+### 4. Add tests
+
+```python
+# tests/test_my_step.py
+
+import pytest
+from pathlib import Path
+from infomux.steps.my_step import MyStep
+
+class TestMyStep:
+    def test_produces_output(self, tmp_path: Path) -> None:
+        input_file = tmp_path / "input.txt"
+        input_file.write_text("Hello world")
+
+        step = MyStep()
+        outputs = step.execute(input_file, tmp_path)
+
+        assert len(outputs) == 1
+        assert outputs[0].name == "my_output.txt"
+        assert outputs[0].exists()
+
+    def test_handles_empty_input(self, tmp_path: Path) -> None:
+        input_file = tmp_path / "input.txt"
+        input_file.write_text("")
+
+        step = MyStep()
+        # Should raise StepError or handle gracefully
+        with pytest.raises(Exception):
+            step.execute(input_file, tmp_path)
+```
+
+### Step conventions
+
+- **Always** use `@register_step` decorator
+- **Always** use `@dataclass` decorator
+- Return `list[Path]` of output files
+- Raise `StepError(self.name, "message")` on failures
+- Log progress with `logger.info()`, details with `logger.debug()`
+- For LLM steps, return `tuple[list[Path], StepModelRecord]` for reproducibility
+
+---
+
+## LLM Integration (Summarization)
+
+The `summarize` step uses Ollama for local LLM inference with reproducibility tracking.
+
+### Chunked Processing
+
+Long transcripts (>15k chars) are automatically chunked:
+
+```
+┌─────────────┐
+│ Transcript  │
+│ (66k chars) │
+└─────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────┐
+│         _chunk_text()                     │
+│  Split at sentence boundaries (~12k each) │
+└──────────────────────────────────────────┘
+       │
+       ▼
+┌─────────┬─────────┬─────────┬─────────┐
+│ Chunk 1 │ Chunk 2 │ Chunk 3 │ Chunk 4 │
+└────┬────┴────┬────┴────┬────┴────┬────┘
+     │         │         │         │
+     ▼         ▼         ▼         ▼
+┌────────────────────────────────────────┐
+│     LLM Extract (per chunk)             │
+│  Action items, decisions, quotes, etc.  │
+└────────────────────────────────────────┘
+     │         │         │         │
+     └────────┬┴─────────┴┬────────┘
+              │           │
+              ▼           │
+┌────────────────────────────────────────┐
+│        LLM Combine                      │
+│  Merge all extracts into final summary  │
+└────────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────────┐
+│              summary.md                  │
+│  ## Overview                             │
+│  ## Action Items                         │
+│  ## Key Takeaways                        │
+│  ...                                     │
+└─────────────────────────────────────────┘
+```
+
+### Content Type Adaptation
+
+The `INFOMUX_CONTENT_TYPE_HINT` environment variable (or `--content-type-hint` CLI flag) adapts the prompt:
+
+```python
+CONTENT_TYPE_HINTS = {
+    "meeting": "Focus on: action items, decisions, assignments, deadlines.",
+    "talk": "Focus on: key concepts, takeaways, quotes.",
+    "podcast": "Focus on: main topics, guest insights, recommendations.",
+    # ...
+}
+```
+
+Custom strings are passed directly to the model.
+
+### Reproducibility
+
+LLM steps return `StepModelRecord` with:
+
+```python
+@dataclass
+class StepModelRecord:
+    model: ModelInfo           # name, provider, version, path
+    params: GenerationParams   # seed, temperature, top_p, max_tokens
+    input_hash: str            # SHA-256 of input text
+    output_tokens: int         # Tokens generated
+```
+
+This enables:
+- Reproducing exact outputs with same seed
+- Tracking which model versions produced which outputs
+- Comparing results across model changes
 
 ---
 

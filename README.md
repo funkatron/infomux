@@ -357,7 +357,7 @@ infomux run --list-pipelines
 | `extract_audio` | media file | `audio.wav` (16kHz mono) | ffmpeg |
 | `transcribe` | `audio.wav` | `transcript.txt` | whisper-cli |
 | `transcribe_timed` | `audio.wav` | `transcript.srt`, `.vtt`, `.json` | whisper-cli -dtw |
-| `summarize` | `transcript.txt` | `summary.md` | Ollama |
+| `summarize` | `transcript.txt` | `summary.md` | Ollama (chunked for long input) |
 | `embed_subs` | video + `.srt` | `video_captioned.mp4` | ffmpeg |
 | `store_json` | run directory | `report.json` | (built-in) |
 | `store_markdown` | run directory | `report.md` | (built-in) |
@@ -536,6 +536,48 @@ Every run produces a complete execution record:
 | `INFOMUX_OBSIDIAN_TAGS` | Comma-separated default tags | `infomux,transcript` |
 | `INFOMUX_BEAR_TAGS` | Comma-separated default tags for Bear | `infomux,transcript` |
 
+### Summarization Options
+
+The `summarize` step uses Ollama for local LLM inference. For best results:
+
+```bash
+# Recommended: pull a 32B model for better accuracy (requires ~20GB VRAM/RAM)
+ollama pull qwen2.5:32b-instruct
+
+# Use it via CLI flag
+infomux run --pipeline summarize --model qwen2.5:32b-instruct meeting.mp4
+```
+
+**Content Type Hints**
+
+Adapt summarization output for different content types:
+
+| Hint | Focus | Best for |
+|------|-------|----------|
+| `meeting` | Action items, decisions, deadlines | Work meetings, standups |
+| `talk` | Key concepts, takeaways, quotes | Conference talks, presentations |
+| `podcast` | Main topics, guest insights | Interviews, podcasts |
+| `lecture` | Concepts, examples, definitions | Educational content |
+| `standup` | Blockers, progress, next steps | Daily standups |
+| `1on1` | Feedback, goals, concerns | One-on-one meetings |
+
+Or pass any custom string:
+
+```bash
+infomux run --pipeline summarize --content-type-hint "quarterly review" recording.mp4
+```
+
+**Long Transcript Handling**
+
+Transcripts over 15,000 characters are automatically chunked and processed in parallel sections to ensure full coverage. You'll see progress like:
+
+```
+chunk 1/4 (0%)
+chunk 2/4 (25%), ~73s remaining
+...
+summarization complete: 139.9s total (combine: 42.5s)
+```
+
 ### Whisper Model Options
 
 | Model | Size | Speed | Quality | Download |
@@ -630,10 +672,20 @@ src/infomux/
 │   ├── resume.py       # infomux resume
 │   └── stream.py       # infomux stream (real-time transcription)
 └── steps/
-    ├── __init__.py     # Step protocol and registry
-    ├── extract_audio.py # ffmpeg wrapper
-    ├── transcribe.py   # whisper-cli wrapper
-    └── summarize.py    # Ollama LLM wrapper
+    ├── __init__.py        # Step protocol, registry, auto-discovery
+    ├── extract_audio.py   # ffmpeg wrapper
+    ├── transcribe.py      # whisper-cli → transcript.txt
+    ├── transcribe_timed.py # whisper-cli → .srt/.vtt/.json
+    ├── summarize.py       # Ollama LLM (with chunking)
+    ├── embed_subs.py      # ffmpeg subtitle embedding
+    ├── storage.py         # Common storage API
+    ├── store_json.py      # Export to JSON
+    ├── store_markdown.py  # Export to Markdown
+    ├── store_sqlite.py    # Index to SQLite
+    ├── store_s3.py        # Upload to S3
+    ├── store_postgres.py  # Index to PostgreSQL
+    ├── store_obsidian.py  # Export to Obsidian vault
+    └── store_bear.py      # Export to Bear.app (macOS)
 ```
 
 ---
