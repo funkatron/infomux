@@ -564,9 +564,9 @@ class TestStoreBear:
         tags = _get_bear_tags()
         assert tags == ["meeting", "notes", "voice"]
 
-    def test_generate_bear_note_returns_title_and_body(self):
-        """Generates title and body for Bear note."""
-        from infomux.steps.store_bear import _generate_bear_note
+    def test_generate_main_note_returns_title_and_body(self):
+        """Generates title and body for main Bear note."""
+        from infomux.steps.store_bear import _generate_main_note
 
         data = RunData(
             run_id="run-123",
@@ -575,11 +575,30 @@ class TestStoreBear:
             transcript_text="This is the transcript.",
         )
 
-        title, body = _generate_bear_note(data)
+        title, body = _generate_main_note(data)
 
         assert title == "my-recording"
-        assert "This is the transcript." in body
         assert "**Date:**" in body
+        assert "[[my-recording - Transcript]]" in body  # Link to transcript note
+
+    def test_generate_transcript_note(self):
+        """Generates separate transcript note."""
+        from infomux.steps.store_bear import _generate_transcript_note
+
+        data = RunData(
+            run_id="run-123",
+            created_at="2026-01-10T12:00:00",
+            input_path="/test/my-recording.mp4",
+            transcript_text="This is the transcript.",
+        )
+
+        result = _generate_transcript_note(data)
+        assert result is not None
+        title, body = result
+
+        assert title == "my-recording - Transcript"
+        assert "This is the transcript." in body
+        assert "[[my-recording]]" in body  # Back-link to main
 
     @patch("infomux.steps.store_bear.subprocess.run")
     def test_open_bear_url_calls_subprocess(self, mock_run):

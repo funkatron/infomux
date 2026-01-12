@@ -40,22 +40,25 @@ ENV_OLLAMA_MODEL = "INFOMUX_OLLAMA_MODEL"
 ENV_OLLAMA_URL = "INFOMUX_OLLAMA_URL"
 
 # Defaults
-DEFAULT_MODEL = "qwen2.5:7b-instruct"
+DEFAULT_MODEL = "llama3.1:8b"
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 
 # Output filename
 SUMMARY_FILENAME = "summary.md"
 
 # System prompt for summarization
-SUMMARIZE_SYSTEM_PROMPT = """You are a precise summarization assistant.
-Given a transcript, produce a clear, structured summary.
+SUMMARIZE_SYSTEM_PROMPT = """You summarize transcripts of audio and video recordings.
 
-Guidelines:
-- Start with a one-sentence overview
-- Use bullet points for key topics
-- Keep the summary concise but complete
-- Preserve important names, numbers, and quotes
-- Do not add information not present in the transcript"""
+Output format:
+1. First line: One sentence describing what this recording is (e.g., "A conference talk by [Name] about [Topic]")
+2. Main points as bullet list
+3. Key quotes or notable moments (if any)
+
+Rules:
+- Be factual and specific - use names, numbers, and details from the transcript
+- Do not editorialize or add commentary
+- Do not use phrases like "the speaker discusses" - just state the content
+- Write in present tense"""
 
 
 @register_step
@@ -114,7 +117,12 @@ class SummarizeStep:
         )
 
         # Build the prompt
-        prompt = f"Please summarize the following transcript:\n\n{transcript}"
+        prompt = f"""Summarize this transcript of a recording.
+
+TRANSCRIPT:
+{transcript}
+
+SUMMARY:"""
 
         # Call Ollama API
         # _call_ollama raises StepError on failure
