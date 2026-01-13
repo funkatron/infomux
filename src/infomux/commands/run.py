@@ -83,6 +83,11 @@ def configure_parser(parser: ArgumentParser) -> None:
         help="Hint for content type: meeting, talk, podcast, lecture, standup, 1on1, or custom",
     )
     parser.add_argument(
+        "--word-level-subtitles",
+        action="store_true",
+        help="Generate word-level subtitles where each word appears individually (experimental)",
+    )
+    parser.add_argument(
         "--video-background-image",
         type=Path,
         default=None,
@@ -225,8 +230,14 @@ def execute(args: Namespace) -> int:
 
     # Build step config overrides from CLI args
     step_configs = {}
+    
+    # Word-level subtitles config
+    if args.word_level_subtitles:
+        step_configs["transcribe_timed"] = {"generate_word_level": True}
+    
+    # Video generation config
     if args.video_background_image or args.video_background_color or args.video_size:
-        generate_video_config = {}
+        generate_video_config = step_configs.get("generate_video", {})
         if args.video_background_image:
             generate_video_config["background_image"] = str(args.video_background_image)
         if args.video_background_color:

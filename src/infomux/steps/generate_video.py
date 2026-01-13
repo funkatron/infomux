@@ -1,14 +1,19 @@
 """
-Generate video from audio with burned-in subtitles.
+Generate video from audio with subtitles (burned-in + soft stream).
 
 Creates a video file from an audio file by combining it with a static
-background image (or solid color) and burning in subtitles.
+background image (or solid color), burning in subtitles, and adding a
+soft subtitle stream for toggleable display.
+
+By default includes both:
+- Burned-in subtitles (permanently rendered on video)
+- Soft subtitle stream (toggleable in video players)
 
 Command:
-    ffmpeg -i audio.wav -loop 1 -i background.png -vf "subtitles=subs.srt" -shortest -c:a copy output.mp4
-
-Or with solid color:
-    ffmpeg -i audio.wav -f lavfi -i color=c=black:s=1920x1080 -vf "subtitles=subs.srt" -shortest -c:a copy output.mp4
+    ffmpeg -i audio.wav -f lavfi -i color=c=black:s=1920x1080 -i subs.srt \\
+           -map 0:a -map 1:v -map 2:s \\
+           -vf "[1:v]subtitles='subs.srt'" \\
+           -c:s mov_text -shortest output.mp4
 """
 
 from __future__ import annotations
@@ -29,17 +34,23 @@ logger = get_logger(__name__)
 @dataclass
 class GenerateVideoStep:
     """
-    Pipeline step to generate a video from audio with burned-in subtitles.
+    Pipeline step to generate a video from audio with subtitles.
 
     Creates a video file by:
     1. Taking audio as input
-    2. Finding subtitle file (transcript.srt) in output_dir
+    2. Finding subtitle file (transcript.srt or transcript_words.srt) in output_dir
     3. Using a static background (image or solid color)
-    4. Burning subtitles into the video
+    4. Burning subtitles into the video (always visible)
+    5. Adding soft subtitle stream (toggleable in video players)
+
+    By default, includes BOTH:
+    - Burned-in subtitles (permanently rendered on video)
+    - Soft subtitle stream (can be toggled on/off in players)
 
     When used in a pipeline, this step:
     - Takes audio file as input (from extract_audio)
     - Finds the .srt file in the output directory (from transcribe_timed)
+    - Prefers transcript_words.srt (word-level) if available, falls back to transcript.srt
     """
 
     name: str = "generate_video"
@@ -64,18 +75,25 @@ class GenerateVideoStep:
             List containing the path to the generated video.
         """
         # Find subtitle file in output_dir
-        srt_path = output_dir / "transcript.srt"
-        if srt_path.exists():
-            subtitle_path = srt_path
+        # Prefer word-level subtitles if available (optional feature)
+        word_srt_path = output_dir / "transcript_words.srt"
+        if word_srt_path.exists():
+            subtitle_path = word_srt_path
+            logger.debug("using word-level subtitles (if available)")
         else:
-            # Look for any .srt file
-            srt_files = list(output_dir.glob("*.srt"))
-            if srt_files:
-                subtitle_path = srt_files[0]
+            # Use regular sentence-level subtitles (default)
+            srt_path = output_dir / "transcript.srt"
+            if srt_path.exists():
+                subtitle_path = srt_path
             else:
-                raise StepError(
-                    self.name, "No subtitle file found in output directory"
-                )
+                # Look for any .srt file
+                srt_files = list(output_dir.glob("*.srt"))
+                if srt_files:
+                    subtitle_path = srt_files[0]
+                else:
+                    raise StepError(
+                        self.name, "No subtitle file found in output directory"
+                    )
 
         return self._generate(input_path, subtitle_path, output_dir)
 
@@ -171,10 +189,12 @@ class GenerateVideoStep:
         cmd.extend(["-i", str(audio)])
 
         # Add background (image or solid color)
+        input_count = 1  # Track input number
         if self.background_image and self.background_image.exists():
             # Use image as background
             cmd.extend(["-loop", "1", "-i", str(self.background_image)])
             video_input = "[1:v]"
+            input_count = 2
         else:
             # Use solid color background
             cmd.extend([
@@ -182,9 +202,17 @@ class GenerateVideoStep:
                 "-i", f"color=c={self.background_color}:s={self.video_size}",
             ])
             video_input = "[1:v]"
+            input_count = 2
+
+        # Add subtitle file as input for soft subtitle stream
+        cmd.extend(["-i", str(subs)])
+        subtitle_input_idx = input_count  # Subtitle is input at this index (2 for color, 2 for image)
 
         # Build subtitle filter
-        subs_escaped = str(subs).replace(":", "\\:").replace("'", "\\'")
+        # Use absolute path and escape properly for ffmpeg
+        subs_abs = subs.resolve()
+        # Escape colons, backslashes, and single quotes for ffmpeg filter
+        subs_escaped = str(subs_abs).replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
         sub_filter = f"subtitles='{subs_escaped}'"
 
         # Add optional styling
@@ -207,14 +235,24 @@ class GenerateVideoStep:
             # Image background: scale image, then add subtitles
             vf = f"{video_input}scale={self.video_size},{sub_filter}"
         else:
-            # Solid color: just add subtitles (already correct size)
-            vf = sub_filter
+            # Solid color: reference video stream, then add subtitles
+            vf = f"{video_input}{sub_filter}"
 
+        # Map streams explicitly
+        # Video: from background input (1), filtered with burned-in subtitles
+        # Audio: from audio input (0)
+        # Subtitles: from subtitle input (2) - soft, toggleable subtitles
+        # Result: Both burned-in subtitles (always visible) AND soft subtitle stream (toggleable)
         cmd.extend([
-            "-vf", vf,
+            "-map", "0:a",  # Map audio from input 0
+            "-map", "1:v",  # Map video from input 1 (will be filtered with burned-in subs)
+            f"-map", f"{subtitle_input_idx}:s",  # Map subtitles from subtitle input (soft subs)
+            "-vf", vf,  # Apply video filter (burns in subtitles on video)
             "-shortest",  # End when shortest input ends (audio)
             "-c:a", "aac",  # Encode audio as AAC for MP4
             "-b:a", "192k",  # Audio bitrate
+            "-c:s", "mov_text",  # Subtitle codec for MP4 (soft subtitles - toggleable)
+            "-metadata:s:s:0", "language=eng",  # Set subtitle language
             str(output),
         ])
 

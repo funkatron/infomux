@@ -15,6 +15,8 @@ Output files:
 
 from __future__ import annotations
 
+import json
+import re
 import subprocess
 import time
 from dataclasses import dataclass
@@ -29,6 +31,333 @@ logger = get_logger(__name__)
 # Output filename prefix and primary output (for pipeline input resolution)
 OUTPUT_PREFIX = "transcript"
 TRANSCRIPT_TIMED_FILENAME = "transcript.srt"  # Primary output for downstream steps
+
+
+def _parse_timestamp(timestamp_str: str) -> int:
+    """
+    Parse SRT timestamp format (HH:MM:SS,mmm) to milliseconds.
+
+    Args:
+        timestamp_str: Timestamp string like "00:00:01,234"
+
+    Returns:
+        Milliseconds as integer.
+    """
+    # Replace comma with period for parsing
+    time_str = timestamp_str.replace(",", ".")
+    parts = time_str.split(":")
+    hours = int(parts[0])
+    minutes = int(parts[1])
+    seconds = float(parts[2])
+    return int((hours * 3600 + minutes * 60 + seconds) * 1000)
+
+
+def _format_timestamp_srt(ms: int) -> str:
+    """
+    Format milliseconds to SRT timestamp format (HH:MM:SS,mmm).
+
+    Args:
+        ms: Milliseconds.
+
+    Returns:
+        Formatted timestamp string.
+    """
+    total_seconds = ms // 1000
+    milliseconds = ms % 1000
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
+
+
+def _format_timestamp_vtt(ms: int) -> str:
+    """
+    Format milliseconds to VTT timestamp format (HH:MM:SS.mmm).
+
+    Args:
+        ms: Milliseconds.
+
+    Returns:
+        Formatted timestamp string.
+    """
+    total_seconds = ms // 1000
+    milliseconds = ms % 1000
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}"
+
+
+def _is_word_boundary(text: str) -> tuple[bool, str]:
+    """
+    Check if text indicates a word boundary and extract clean text.
+
+    Args:
+        text: Token text (may have leading spaces).
+
+    Returns:
+        Tuple of (is_boundary, clean_text).
+        is_boundary: True if this starts a new word or is punctuation.
+        clean_text: Cleaned text without leading spaces.
+    """
+    # Leading space indicates word boundary
+    has_leading_space = text.startswith(" ")
+    clean_text = text.strip()
+
+    if not clean_text:
+        return (True, "")
+
+    # Punctuation-only tokens are boundaries
+    if clean_text in [",", ".", "!", "?", ";", ":", "-"]:
+        return (True, clean_text)
+
+    # Special tokens are boundaries
+    if clean_text.startswith("[") or clean_text.startswith("</"):
+        return (True, "")
+
+    return (has_leading_space, clean_text)
+
+
+def _generate_word_level_srt(json_path: Path, output_path: Path) -> None:
+    """
+    Generate word-level SRT file from JSON transcription.
+
+    Each word appears when it's spoken and disappears when it's done.
+    Combines sub-word tokens into complete words.
+
+    Args:
+        json_path: Path to transcript.json file.
+        output_path: Path to write word-level SRT file.
+    """
+    with open(json_path) as f:
+        data = json.load(f)
+
+    transcription = data.get("transcription", [])
+    if not transcription:
+        logger.warning("no transcription data in JSON, skipping word-level SRT")
+        return
+
+    entries = []
+    entry_num = 1
+
+    for segment in transcription:
+        tokens = segment.get("tokens", [])
+        current_word = ""
+        word_start_ms = None
+        word_end_ms = None
+
+        for token in tokens:
+            raw_text = token.get("text", "")
+            is_boundary, clean_text = _is_word_boundary(raw_text)
+
+            # Skip empty or special tokens
+            if not clean_text:
+                continue
+
+            timestamps = token.get("timestamps", {})
+            if not timestamps:
+                continue
+
+            from_ts = timestamps.get("from", "")
+            to_ts = timestamps.get("to", "")
+
+            if not from_ts or not to_ts:
+                continue
+
+            # Parse timestamps
+            try:
+                from_ms = _parse_timestamp(from_ts)
+                to_ms = _parse_timestamp(to_ts)
+            except (ValueError, IndexError):
+                continue
+
+            # Skip if duration is 0 or negative
+            if to_ms <= from_ms:
+                continue
+
+            if is_boundary:
+                # Save current word if we have one
+                if current_word and word_start_ms is not None and word_end_ms is not None:
+                    word_text = current_word.strip()
+                    if word_text:
+                        entries.append({
+                            "num": entry_num,
+                            "from": word_start_ms,
+                            "to": word_end_ms,
+                            "text": word_text,
+                        })
+                        entry_num += 1
+                    current_word = ""
+                    word_start_ms = None
+                    word_end_ms = None
+
+                # If it's punctuation, create a separate entry for it
+                if clean_text in [",", ".", "!", "?", ";", ":", "-"]:
+                    # Punctuation gets very short duration
+                    entries.append({
+                        "num": entry_num,
+                        "from": from_ms,
+                        "to": min(from_ms + 50, to_ms),  # Max 50ms for punctuation
+                        "text": clean_text,
+                    })
+                    entry_num += 1
+                else:
+                    # Start new word
+                    word_start_ms = from_ms
+                    word_end_ms = to_ms
+                    current_word = clean_text
+            else:
+                # Continue current word
+                if word_start_ms is None:
+                    word_start_ms = from_ms
+                word_end_ms = to_ms
+                current_word += clean_text
+
+        # Save final word if exists
+        if current_word and word_start_ms is not None and word_end_ms is not None:
+            word_text = current_word.strip()
+            if word_text:
+                entries.append({
+                    "num": entry_num,
+                    "from": word_start_ms,
+                    "to": word_end_ms,
+                    "text": word_text,
+                })
+                entry_num += 1
+
+    # Write SRT file
+    with open(output_path, "w", encoding="utf-8") as f:
+        for entry in entries:
+            f.write(f"{entry['num']}\n")
+            f.write(
+                f"{_format_timestamp_srt(entry['from'])} --> "
+                f"{_format_timestamp_srt(entry['to'])}\n"
+            )
+            f.write(f"{entry['text']}\n")
+            f.write("\n")
+
+    logger.info(
+        "generated word-level SRT: %s (%d words)",
+        output_path.name,
+        len(entries),
+    )
+
+
+def _generate_word_level_vtt(json_path: Path, output_path: Path) -> None:
+    """
+    Generate word-level VTT file from JSON transcription.
+
+    Each word appears when it's spoken and disappears when it's done.
+    Combines sub-word tokens into complete words.
+
+    Args:
+        json_path: Path to transcript.json file.
+        output_path: Path to write word-level VTT file.
+    """
+    with open(json_path) as f:
+        data = json.load(f)
+
+    transcription = data.get("transcription", [])
+    if not transcription:
+        logger.warning("no transcription data in JSON, skipping word-level VTT")
+        return
+
+    entries = []
+
+    for segment in transcription:
+        tokens = segment.get("tokens", [])
+        current_word = ""
+        word_start_ms = None
+        word_end_ms = None
+
+        for token in tokens:
+            raw_text = token.get("text", "")
+            is_boundary, clean_text = _is_word_boundary(raw_text)
+
+            # Skip empty or special tokens
+            if not clean_text:
+                continue
+
+            timestamps = token.get("timestamps", {})
+            if not timestamps:
+                continue
+
+            from_ts = timestamps.get("from", "")
+            to_ts = timestamps.get("to", "")
+
+            if not from_ts or not to_ts:
+                continue
+
+            # Parse timestamps
+            try:
+                from_ms = _parse_timestamp(from_ts)
+                to_ms = _parse_timestamp(to_ts)
+            except (ValueError, IndexError):
+                continue
+
+            # Skip if duration is 0 or negative
+            if to_ms <= from_ms:
+                continue
+
+            if is_boundary:
+                # Save current word if we have one
+                if current_word and word_start_ms is not None and word_end_ms is not None:
+                    word_text = current_word.strip()
+                    if word_text:
+                        entries.append({
+                            "from": word_start_ms,
+                            "to": word_end_ms,
+                            "text": word_text,
+                        })
+                    current_word = ""
+                    word_start_ms = None
+                    word_end_ms = None
+
+                # If it's punctuation, create a separate entry for it
+                if clean_text in [",", ".", "!", "?", ";", ":", "-"]:
+                    # Punctuation gets very short duration
+                    entries.append({
+                        "from": from_ms,
+                        "to": min(from_ms + 50, to_ms),  # Max 50ms for punctuation
+                        "text": clean_text,
+                    })
+                else:
+                    # Start new word
+                    word_start_ms = from_ms
+                    word_end_ms = to_ms
+                    current_word = clean_text
+            else:
+                # Continue current word
+                if word_start_ms is None:
+                    word_start_ms = from_ms
+                word_end_ms = to_ms
+                current_word += clean_text
+
+        # Save final word if exists
+        if current_word and word_start_ms is not None and word_end_ms is not None:
+            word_text = current_word.strip()
+            if word_text:
+                entries.append({
+                    "from": word_start_ms,
+                    "to": word_end_ms,
+                    "text": word_text,
+                })
+
+    # Write VTT file
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("WEBVTT\n\n")
+        for entry in entries:
+            f.write(
+                f"{_format_timestamp_vtt(entry['from'])} --> "
+                f"{_format_timestamp_vtt(entry['to'])}\n"
+            )
+            f.write(f"{entry['text']}\n\n")
+
+    logger.info(
+        "generated word-level VTT: %s (%d words)",
+        output_path.name,
+        len(entries),
+    )
 
 
 def _detect_model_type(model_path: Path) -> str:
@@ -75,9 +404,13 @@ class TranscribeTimedStep:
 
     Uses whisper.cpp's DTW (Dynamic Time Warping) for precise word alignment.
     Produces SRT, VTT, and JSON output files suitable for captioning.
+
+    By default, generates sentence-level subtitles. Set generate_word_level=True
+    to also generate word-level subtitles where each word appears individually.
     """
 
     name: str = "transcribe_timed"
+    generate_word_level: bool = False  # Generate word-level subtitles (optional)
 
     def execute(self, input_path: Path, output_dir: Path) -> list[Path]:
         """
@@ -143,15 +476,48 @@ class TranscribeTimedStep:
 
             # Collect output files
             outputs = []
+            json_path = None
             for ext in [".srt", ".vtt", ".json"]:
                 path = Path(str(output_prefix) + ext)
                 if path.exists():
                     outputs.append(path)
                     size = path.stat().st_size
                     logger.info("created: %s (%d bytes)", path.name, size)
+                    if ext == ".json":
+                        json_path = path
 
             if not outputs:
                 raise StepError(self.name, "no output files created")
+
+            # Generate word-level subtitles from JSON (if enabled)
+            if self.generate_word_level and json_path and json_path.exists():
+                word_srt_path = output_dir / "transcript_words.srt"
+                word_vtt_path = output_dir / "transcript_words.vtt"
+
+                try:
+                    _generate_word_level_srt(json_path, word_srt_path)
+                    if word_srt_path.exists():
+                        outputs.append(word_srt_path)
+                        # Count entries (each entry is 4 lines: number, timestamp, text, blank)
+                        with open(word_srt_path) as f:
+                            line_count = sum(1 for _ in f)
+                            word_count = line_count // 4
+                        logger.info(
+                            "generated word-level SRT: %s (%d words)",
+                            word_srt_path.name,
+                            word_count,
+                        )
+
+                    _generate_word_level_vtt(json_path, word_vtt_path)
+                    if word_vtt_path.exists():
+                        outputs.append(word_vtt_path)
+                        logger.info(
+                            "generated word-level VTT: %s",
+                            word_vtt_path.name,
+                        )
+                except Exception as e:
+                    # Log but don't fail - word-level is optional enhancement
+                    logger.warning("failed to generate word-level subtitles: %s", e)
 
             return outputs
 
@@ -161,18 +527,23 @@ class TranscribeTimedStep:
             raise StepError(self.name, f"subprocess error: {e}")
 
 
-def run(input_path: Path, output_dir: Path) -> StepResult:
+def run(
+    input_path: Path,
+    output_dir: Path,
+    generate_word_level: bool = False,
+) -> StepResult:
     """
     Run the transcribe_timed step.
 
     Args:
         input_path: Path to input audio file.
         output_dir: Directory for output artifacts.
+        generate_word_level: If True, also generate word-level subtitles.
 
     Returns:
         StepResult with execution details.
     """
-    step = TranscribeTimedStep()
+    step = TranscribeTimedStep(generate_word_level=generate_word_level)
     start_time = time.monotonic()
 
     tools = get_tool_paths()
