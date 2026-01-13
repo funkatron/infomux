@@ -25,6 +25,10 @@ infomux run --pipeline summarize zoom-call.mp4
 infomux run --pipeline caption my-song.mp4
 # → video with embedded toggleable subtitles
 
+# Generate video from audio with burned subtitles
+infomux run --pipeline audio-to-video voice-note.m4a
+# → video with burned-in subtitles (great for sharing!)
+
 # Full analysis: transcript + timestamps + summary + database
 infomux run --pipeline report-store interview.m4a
 # → all outputs + indexed in searchable SQLite
@@ -180,6 +184,15 @@ infomux run --pipeline caption-burn tutorial.mp4
 
 # Get word-level timestamps without video
 infomux run --pipeline timed podcast.mp3
+
+# Generate video from audio with burned subtitles
+infomux run --pipeline audio-to-video meeting-recording.m4a
+
+# Customize video background and size
+infomux run --pipeline audio-to-video --video-background-color blue --video-size 1280x720 audio.m4a
+
+# Use custom background image
+infomux run --pipeline audio-to-video --video-background-image ~/Pictures/bg.png audio.m4a
 
 # Full analysis with searchable database
 infomux run --pipeline report-store weekly-standup.mp4
@@ -348,6 +361,7 @@ Stopping: stop word 'stop recording'
 | `report-store` | Full analysis + searchable database | ... → summarize → store_sqlite |
 | `caption` | Soft subtitles (toggleable) | extract_audio → transcribe_timed → embed_subs |
 | `caption-burn` | Burned-in subtitles (permanent) | extract_audio → transcribe_timed → embed_subs |
+| `audio-to-video` | Generate video from audio with burned subtitles | extract_audio → transcribe_timed → generate_video |
 
 ```bash
 # List available pipelines
@@ -363,6 +377,7 @@ infomux run --list-pipelines
 | `transcribe_timed` | `audio.wav` | `transcript.srt`, `.vtt`, `.json` | whisper-cli -dtw |
 | `summarize` | `transcript.txt` | `summary.md` | Ollama (chunked for long input) |
 | `embed_subs` | video + `.srt` | `video_captioned.mp4` | ffmpeg |
+| `generate_video` | audio + `.srt` | `audio_with_subs.mp4` | ffmpeg |
 | `store_json` | run directory | `report.json` | (built-in) |
 | `store_markdown` | run directory | `report.md` | (built-in) |
 | `store_sqlite` | run directory | → `infomux.db` | sqlite3 |
@@ -388,6 +403,12 @@ input.mp4 → [extract_audio] → audio.wav → [transcribe_timed] → transcrip
     └───────────────────────────────────→ [embed_subs] ←─────────────────┘
                                                ↓
                                     video_captioned.mp4 (with soft subtitles)
+
+# audio-to-video pipeline (generate video from audio)
+input.m4a → [extract_audio] → audio.wav → [transcribe_timed] → transcript.srt/vtt/json
+                                                                    ↓
+                                                          [generate_video] → audio_with_subs.mp4
+                                                          (solid color or image background)
 ```
 
 ### Pipeline Artifacts
@@ -449,6 +470,18 @@ The SQLite database enables:
 ├── video_captioned.mp4  # Video with subtitles
 └── job.json
 ```
+
+**`audio-to-video`**
+```
+├── audio.wav
+├── transcript.srt
+├── transcript.vtt
+├── transcript.json
+├── audio_with_subs.mp4  # Generated video with burned subtitles
+└── job.json
+```
+
+> **Note:** The `audio-to-video` pipeline generates a video file from audio with a solid color or image background. Use `--video-background-image`, `--video-background-color`, or `--video-size` to customize the output.
 
 ---
 
