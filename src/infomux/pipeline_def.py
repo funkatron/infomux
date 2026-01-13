@@ -245,6 +245,30 @@ REPORT_STORE_PIPELINE = PipelineDef(
     ],
 )
 
+# Generate video from audio with burned subtitles
+AUDIO_TO_VIDEO_PIPELINE = PipelineDef(
+    name="audio-to-video",
+    description="Generate video from audio with burned-in subtitles",
+    steps=[
+        StepDef(
+            name="extract_audio",
+            input_from=None,
+        ),
+        StepDef(
+            name="transcribe_timed",
+            input_from="extract_audio",
+        ),
+        StepDef(
+            name="generate_video",
+            input_from="extract_audio",  # Uses audio.wav
+            config={
+                "background_color": "black",
+                "video_size": "1920x1080",
+            },
+        ),
+    ],
+)
+
 # Available pipelines
 PIPELINES: dict[str, PipelineDef] = {
     "transcribe": DEFAULT_PIPELINE,
@@ -254,6 +278,7 @@ PIPELINES: dict[str, PipelineDef] = {
     "caption-burn": CAPTION_BURN_PIPELINE,
     "report": REPORT_PIPELINE,
     "report-store": REPORT_STORE_PIPELINE,
+    "audio-to-video": AUDIO_TO_VIDEO_PIPELINE,
 }
 
 

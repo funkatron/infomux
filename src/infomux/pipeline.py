@@ -25,6 +25,7 @@ def run_pipeline(
     run_dir: Path,
     pipeline: PipelineDef | None = None,
     step_names: list[str] | None = None,
+    step_configs: dict[str, dict] | None = None,
 ) -> bool:
     """
     Execute the pipeline steps for a job.
@@ -92,6 +93,12 @@ def run_pipeline(
 
         logger.debug("step input: %s", input_path)
 
+        # Merge step config (from pipeline def) with CLI overrides
+        step_config = dict(step_def.config) if step_def.config else {}
+        if step_configs and step_name in step_configs:
+            step_config.update(step_configs[step_name])
+            logger.debug("merged config for %s: %s", step_name, step_config)
+
         # Create step record
         step_record = StepRecord(
             name=step_name,
@@ -101,7 +108,7 @@ def run_pipeline(
         job.steps.append(step_record)
 
         # Run the step via registry
-        result = run_step(step_name, input_path, run_dir, step_def.config)
+        result = run_step(step_name, input_path, run_dir, step_config if step_config else None)
 
         # Update step record
         step_record.status = "completed" if result.success else "failed"
