@@ -230,11 +230,11 @@ def execute(args: Namespace) -> int:
 
     # Build step config overrides from CLI args
     step_configs = {}
-    
+
     # Word-level subtitles config
     if args.word_level_subtitles:
         step_configs["transcribe_timed"] = {"generate_word_level": True}
-    
+
     # Video generation config
     if args.video_background_image or args.video_background_color or args.video_size:
         generate_video_config = step_configs.get("generate_video", {})
