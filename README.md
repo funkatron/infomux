@@ -824,20 +824,16 @@ uv run infomux run --pipeline lyric-video-vocals <your-audio-file>
 The `align_lyrics` step requires aeneas for forced alignment when you have official lyrics:
 
 ```bash
-# Install Python dependencies using venv's pip directly (numpy must be installed first)
-.venv/bin/pip install numpy
-.venv/bin/pip install aeneas
-
-# Or if using uv:
-uv run python -m pip install numpy
-uv run python -m pip install aeneas
+# Install Python dependencies (numpy must be installed first)
+uv pip install numpy
+uv pip install --no-build-isolation aeneas
 
 # System dependencies:
 # - macOS: Uses built-in TTS (no additional install needed)
 # - Linux: Install espeak: sudo apt-get install espeak (or equivalent)
 ```
 
-**Note:** aeneas requires numpy to be installed before building. Use the venv's pip directly so the build process can see numpy.
+**Note:** aeneas requires numpy to be installed before building. The `--no-build-isolation` flag allows aeneas's build process to see the installed numpy.
 
 Then use the `lyric-video-aligned` or `lyric-video-aligned-vocals` pipeline with a lyrics file:
 
