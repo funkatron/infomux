@@ -25,8 +25,7 @@ from infomux.config import get_tool_paths
 from infomux.job import InputFile, JobEnvelope, JobStatus, generate_run_id
 from infomux.log import get_logger
 from infomux.pipeline import run_pipeline
-from infomux.pipeline_def import get_pipeline, list_pipelines
-from infomux.steps import get_step, list_steps
+from infomux.pipeline_def import get_pipeline
 from infomux.storage import get_run_dir, save_job
 
 logger = get_logger(__name__)
@@ -105,7 +104,7 @@ def configure_parser(parser: ArgumentParser) -> None:
     parser.add_argument(
         "input",
         type=str,
-        nargs="?",  # Optional when using --check-deps or --list-pipelines
+        nargs="?",  # Optional when using --check-deps
         help="Path to the input media file or URL (http:// or https://)",
     )
     parser.add_argument(
@@ -130,16 +129,6 @@ def configure_parser(parser: ArgumentParser) -> None:
         "--check-deps",
         action="store_true",
         help="Check for required dependencies and exit",
-    )
-    parser.add_argument(
-        "--list-pipelines",
-        action="store_true",
-        help="List available pipelines and exit",
-    )
-    parser.add_argument(
-        "--list-steps",
-        action="store_true",
-        help="List available steps and exit",
     )
     parser.add_argument(
         "--model",
@@ -191,14 +180,6 @@ def execute(args: Namespace) -> int:
     Returns:
         Exit code (0 for success, non-zero for errors).
     """
-    # List pipelines mode
-    if args.list_pipelines:
-        return _list_pipelines()
-
-    # List steps mode
-    if args.list_steps:
-        return _list_steps()
-
     # Check dependencies mode
     if args.check_deps:
         return _check_dependencies()
@@ -408,53 +389,6 @@ def execute(args: Namespace) -> int:
     print(run_dir, file=sys.stdout)
 
     return 0 if success else 1
-
-
-def _list_pipelines() -> int:
-    """
-    List available pipelines.
-
-    Returns:
-        Exit code (always 0).
-    """
-    print("Available pipelines:")
-    print()
-    for name in list_pipelines():
-        pipeline = get_pipeline(name)
-        print(f"  {name}")
-        print(f"    {pipeline.description}")
-        print(f"    Steps: {' → '.join(pipeline.step_names())}")
-        print()
-    return 0
-
-
-def _list_steps() -> int:
-    """
-    List available steps.
-
-    Returns:
-        Exit code (always 0).
-    """
-    print("Available steps:")
-    print()
-    steps = sorted(list_steps())
-    for name in steps:
-        step_info = get_step(name)
-        if step_info:
-            output_info = ""
-            if step_info.output_filename:
-                output_info = f" → {step_info.output_filename}"
-            module_info = ""
-            if step_info.module:
-                # Extract just the module name (e.g., "extract_audio" from "infomux.steps.extract_audio")
-                module_name = step_info.module.split(".")[-1] if "." in step_info.module else step_info.module
-                module_info = f" ({module_name})"
-            print(f"  {name}{module_info}{output_info}")
-        else:
-            print(f"  {name}")
-    print()
-    print(f"Total: {len(steps)} step(s)")
-    return 0
 
 
 def _check_dependencies() -> int:

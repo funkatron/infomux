@@ -197,11 +197,11 @@ infomux run --pipeline audio-to-video --video-background-image ~/Pictures/bg.png
 # Full analysis with searchable database
 infomux run --pipeline report-store weekly-standup.mp4
 
-# List all available pipelines
-infomux run --list-pipelines
+# List all available pipelines (use inspect command)
+infomux inspect --list-pipelines
 
-# List all available steps
-infomux run --list-steps
+# List all available steps (use inspect command)
+infomux inspect --list-steps
 
 # Preview what would happen (no actual processing)
 infomux run --dry-run my-file.mp4
@@ -220,11 +220,17 @@ infomux -v run my-file.mp4
 View details of a completed run.
 
 ```bash
-# List all runs with summary information
+# List all runs with summary information (tabular format)
 infomux inspect --list
 
 # List runs as JSON (for scripting/automation)
 infomux inspect --list --json
+
+# List available pipelines
+infomux inspect --list-pipelines
+
+# List available steps
+infomux inspect --list-steps
 
 # View a specific run (tab-complete the run ID)
 infomux inspect run-20260111-020549-c36c19
@@ -239,19 +245,14 @@ infomux inspect --json run-XXXXX | jq '.artifacts'
 **Example output (inspect --list):**
 
 ```
-Found 5 run(s):
+   Run ID                     Status    Date       Pipeline       Input                                          Artifacts
+--------------------------------------------------------------------------------------------------------------------------
+●  run-20260120-191406-7179cd completed 2026-01-20 caption-burn   audio.simplecast.com....mp3                            5
+●  run-20260120-190809-ae6458 completed 2026-01-20 transcribe     audio.simplecast.com....mp3                            2
+●  run-20260113-003525-1a50f0 completed 2026-01-13 timed          Skin WBD NEO team mtg 2025-06-25.m4a                   6
+●  run-20260113-002820-c4ae2c completed 2026-01-13 audio-to-video how_to_be_a_great_developer_tek14-lossless.m4a         7
 
-  ● run-20260120-191406-7179cd
-      Status: completed
-      Created: 2026-01-20
-      Input: audio.simplecast.com....mp3
-      Artifacts: 5 file(s)
-
-  ● run-20260120-190809-ae6458
-      Status: completed
-      Created: 2026-01-20
-      Input: audio.simplecast.com....mp3
-      Artifacts: 2 file(s)
+Total: 4 run(s)
 ```
 
 **Example output (inspect <run-id>):**
@@ -389,10 +390,10 @@ Stopping: stop word 'stop recording'
 
 ```bash
 # List available pipelines
-infomux run --list-pipelines
+infomux inspect --list-pipelines
 
 # List available steps
-infomux run --list-steps
+infomux inspect --list-steps
 ```
 
 ### Steps
@@ -764,7 +765,7 @@ src/infomux/
 - Run storage under `~/.local/share/infomux/runs/`
 - Pipeline definitions as data (`PipelineDef`, `StepDef`)
 - Auto-discovery of steps from `steps/` directory
-- `--pipeline`, `--list-pipelines`, `--list-steps`, `--steps`, `--dry-run`, `--check-deps` flags
+- `--pipeline`, `--steps`, `--dry-run`, `--check-deps` flags (listing moved to `inspect` command)
 
 **Steps:**
 - `extract_audio` — ffmpeg → 16kHz mono WAV
