@@ -128,10 +128,18 @@ class AlignLyricsStep:
         
         # Build aeneas command
         # Use word-level alignment with non-speech masking for music
+        # Use macOS built-in TTS if available, otherwise fall back to espeak
+        import platform
+        if platform.system() == "Darwin":
+            tts_engine = "macos"  # Use macOS built-in TTS (no espeak needed)
+        else:
+            tts_engine = "espeak"  # Default to espeak on Linux
+        
         config_string = (
             f"task_language={self.language}|"
             "is_text_type=plain|"
             "os_task_file_format=json|"
+            f"tts={tts_engine}|"
             "mfcc_mask_nonspeech=True|"
             "mfcc_mask_nonspeech_l3=True"
         )
