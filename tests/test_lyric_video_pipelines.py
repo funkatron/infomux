@@ -6,8 +6,9 @@ Tests pipeline execution with vocal isolation and forced alignment:
 - lyric-video-aligned: extract_audio → align_lyrics → generate_lyric_video
 - lyric-video-aligned-isolated: isolate_vocals → align_lyrics → extract_audio → generate_lyric_video
 
+Test example: "These Days" by Dogtablet
 Note: Full execution tests are skipped by default as they require:
-- Real audio files (recommend using first 60 seconds for faster testing)
+- Real audio files (recommend using first 60 seconds for faster testing: ffmpeg -i input.mp3 -t 60 -c copy sample.mp3)
 - External tools (ffmpeg, demucs/spleeter, whisper-cli, aeneas)
 - Official lyrics file for aligned pipelines
 """
@@ -174,8 +175,8 @@ class TestLyricVideoIsolatedPipeline:
 class TestLyricVideoAlignedPipeline:
     """Functional tests for lyric-video-aligned pipelines using official lyrics."""
 
-    # Example official lyrics for testing aligned pipelines
-    # Note: Replace with your own lyrics file for actual testing
+    # Official lyrics for "These Days" by Dogtablet
+    # Used for testing aligned pipelines with forced alignment
     TEST_LYRICS = """When you walk through the door .
 Hearts hit the floor.
 The sky fades to north and south
@@ -282,10 +283,10 @@ Five times by design. I'm still alive."""
         This test demonstrates using official lyrics for more accurate timing than transcription.
         """
         # Example: Use a test audio file (first 60 seconds recommended for faster testing)
-        # audio_file = Path("/path/to/your/test-audio-sample.mp3")
+        # For "These Days" by Dogtablet, create a sample: ffmpeg -i full-song.mp3 -t 60 -c copy sample.mp3
         audio_file = Path(
             "/Users/coj/Library/Mobile Documents/com~apple~CloudDocs/_TRANSFER/"
-            "%5BTEST%20MASTER%20002%5D%20-%20Dogtablet%20-%20These%20Days%20-%202Bit%20Through%20The%20Wormhole%20Edit%20-%20EAM%20Mix-05.mp3"
+            "test-audio-sample.mp3"  # First 60 seconds of the full song
         )
         
         if not audio_file.exists():
