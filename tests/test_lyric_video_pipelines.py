@@ -81,10 +81,11 @@ class TestLyricVideoIsolatedPipeline:
         
         Marked as skip if file doesn't exist to avoid failures in CI.
         """
-        # Use the actual file path from the user's example
+        # Example: Use a test audio file (first 60 seconds recommended for faster testing)
+        # For "These Days" by Dogtablet, create a sample: ffmpeg -i full-song.mp3 -t 60 -c copy sample.mp3
         audio_file = Path(
             "/Users/coj/Library/Mobile Documents/com~apple~CloudDocs/_TRANSFER/"
-            "%5BTEST%20MASTER%20002%5D%20-%20Dogtablet%20-%20These%20Days%20-%202Bit%20Through%20The%20Wormhole%20Edit%20-%20EAM%20Mix-05.mp3"
+            "test-audio-sample.mp3"  # First 60 seconds of the full song
         )
         
         if not audio_file.exists():
