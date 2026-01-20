@@ -207,6 +207,15 @@ def configure_parser(parser: ArgumentParser) -> None:
         "Requires lyric-video pipeline.",
     )
     parser.add_argument(
+        "--lyrics-file",
+        type=Path,
+        default=None,
+        help="Path to official lyrics text file for forced alignment. "
+        "When provided, uses align_lyrics step instead of transcribe_timed. "
+        "If not provided, looks for lyrics.txt in the run directory. "
+        "Requires lyric-video-aligned or lyric-video-aligned-isolated pipeline.",
+    )
+    parser.add_argument(
         "--lyric-font-color",
         type=str,
         default=None,
@@ -414,6 +423,13 @@ def execute(args: Namespace) -> int:
 
     # Build step config overrides from CLI args
     step_configs = {}
+
+    # Lyrics file for forced alignment
+    if args.lyrics_file:
+        if not args.lyrics_file.exists():
+            logger.error("lyrics file not found: %s", args.lyrics_file)
+            return 1
+        step_configs["align_lyrics"] = {"lyrics_file": str(args.lyrics_file)}
 
     # Word-level subtitles config
     if args.word_level_subtitles:
