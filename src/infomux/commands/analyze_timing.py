@@ -72,6 +72,99 @@ def _extract_frame_at_time(
     return result.returncode == 0 and output_path.exists()
 
 
+def _detect_speech_segments(ffmpeg: Path, audio_path: Path) -> list[dict]:
+    """
+    Detect speech segments in audio using silence detection.
+    
+    Uses ffmpeg silencedetect filter to find speech vs silence regions.
+    
+    Args:
+        ffmpeg: Path to ffmpeg executable
+        audio_path: Path to audio file
+        
+    Returns:
+        List of dicts with start, end times of speech segments
+    """
+    # Use silencedetect to find speech segments
+    # -af silencedetect=noise=-30dB:duration=0.3 finds silence below -30dB for 0.3s+
+    cmd = [
+        str(ffmpeg),
+        "-i", str(audio_path),
+        "-af", "silencedetect=noise=-30dB:duration=0.1",
+        "-f", "null",
+        "-",
+    ]
+    
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    
+    # Parse silencedetect output
+    # Format: "silence_start: 1.234" and "silence_end: 5.678 | silence_duration: 4.444"
+    import re
+    segments = []
+    silence_starts = []
+    silence_ends = []
+    
+    for line in result.stderr.split("\n"):
+        # Find silence_start
+        start_match = re.search(r"silence_start: ([\d.]+)", line)
+        if start_match:
+            silence_starts.append(float(start_match.group(1)))
+        
+        # Find silence_end
+        end_match = re.search(r"silence_end: ([\d.]+)", line)
+        if end_match:
+            silence_ends.append(float(end_match.group(1)))
+    
+    # Build speech segments (between silence)
+    # First segment: 0 to first silence_start
+    # Middle segments: silence_end to next silence_start
+    # Last segment: last silence_end to end
+    
+    if not silence_starts:
+        # No silence detected - entire audio is speech
+        # Get audio duration
+        duration_cmd = [
+            str(ffmpeg),
+            "-i", str(audio_path),
+            "-f", "null",
+            "-",
+        ]
+        duration_result = subprocess.run(
+            duration_cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        # Parse duration from stderr
+        duration_match = re.search(r"Duration: (\d+):(\d+):(\d+\.\d+)", duration_result.stderr)
+        if duration_match:
+            hours, minutes, seconds = map(float, duration_match.groups())
+            total_seconds = hours * 3600 + minutes * 60 + seconds
+            return [{"start": 0.0, "end": total_seconds}]
+        return []
+    
+    # Build segments
+    if silence_ends:
+        # First segment: 0 to first silence_start
+        if silence_starts[0] > 0.1:  # Only if there's actual speech before first silence
+            segments.append({"start": 0.0, "end": silence_starts[0]})
+        
+        # Middle segments: between silence_end and next silence_start
+        for i in range(len(silence_ends)):
+            if i < len(silence_starts):
+                segments.append({
+                    "start": silence_ends[i],
+                    "end": silence_starts[i],
+                })
+    
+    return segments
+
+
 def _analyze_audio_energy(
     ffmpeg: Path, audio_path: Path, start_time: float, end_time: float
 ) -> dict:
@@ -89,13 +182,13 @@ def _analyze_audio_energy(
     """
     duration = end_time - start_time
     
-    # Use ffmpeg's astats filter to analyze audio
+    # Use ffmpeg's volumedetect to get average volume
     cmd = [
         str(ffmpeg),
         "-ss", str(start_time),
         "-t", str(duration),
         "-i", str(audio_path),
-        "-af", "astats=metadata=1:reset=1",
+        "-af", "volumedetect",
         "-f", "null",
         "-",
     ]
@@ -107,20 +200,23 @@ def _analyze_audio_energy(
         check=False,
     )
     
-    # Parse energy from astats output
-    # This is a simplified version - could be enhanced
     energy_info = {
         "has_audio": result.returncode == 0,
         "duration": duration,
     }
     
-    # Try to extract RMS or peak levels from stderr
-    if "RMS level" in result.stderr:
-        # Parse RMS level (e.g., "RMS level: -20.1 dB")
-        import re
-        rms_match = re.search(r"RMS level: ([\d.-]+) dB", result.stderr)
-        if rms_match:
-            energy_info["rms_db"] = float(rms_match.group(1))
+    # Parse mean_volume from volumedetect output
+    # Format: "mean_volume: -20.5 dB"
+    import re
+    mean_match = re.search(r"mean_volume: ([\d.-]+) dB", result.stderr)
+    if mean_match:
+        energy_info["mean_volume_db"] = float(mean_match.group(1))
+        # Consider > -50dB as likely speech
+        energy_info["likely_speech"] = float(mean_match.group(1)) > -50.0
+    
+    max_match = re.search(r"max_volume: ([\d.-]+) dB", result.stderr)
+    if max_match:
+        energy_info["max_volume_db"] = float(max_match.group(1))
     
     return energy_info
 
@@ -242,7 +338,16 @@ def execute(args: Namespace) -> int:
         else:
             logger.warning("failed to extract frame for word '%s' at %.2fs", word["text"], word["start_sec"])
     
-    # Analyze audio if requested
+    # Detect actual speech segments from audio
+    actual_speech_segments = []
+    if audio_path:
+        logger.info("detecting actual speech segments from audio...")
+        actual_speech_segments = _detect_speech_segments(tools.ffmpeg, audio_path)
+        logger.info("detected %d speech segments from audio", len(actual_speech_segments))
+        for seg in actual_speech_segments[:5]:  # Show first 5
+            logger.info("  speech segment: %.2f-%.2fs (duration: %.2fs)", seg["start"], seg["end"], seg["end"] - seg["start"])
+    
+    # Analyze audio energy if requested
     if args.audio_analysis and audio_path:
         logger.info("analyzing audio energy at word boundaries...")
         
@@ -254,13 +359,23 @@ def execute(args: Namespace) -> int:
                 word["end_sec"],
             )
             
+            # Check if word timing overlaps with actual speech
+            overlaps_speech = False
+            if actual_speech_segments:
+                for seg in actual_speech_segments:
+                    # Check if word timing overlaps with speech segment
+                    if not (word["end_sec"] < seg["start"] or word["start_sec"] > seg["end"]):
+                        overlaps_speech = True
+                        break
+            
             logger.info(
-                "word %d '%s' (%.2f-%.2fs): energy=%s",
+                "word %d '%s' (%.2f-%.2fs): energy=%s, overlaps_speech=%s",
                 i + 1,
                 word["text"],
                 word["start_sec"],
                 word["end_sec"],
-                energy.get("rms_db", "unknown"),
+                energy.get("mean_volume_db", "unknown"),
+                overlaps_speech,
             )
     
     # Summary
@@ -286,5 +401,32 @@ def execute(args: Namespace) -> int:
     logger.info("")
     logger.info("View extracted frames in: %s", frames_dir)
     logger.info("Compare frame content to expected word timing above")
+    
+    # Compare expected vs actual speech timing
+    if actual_speech_segments:
+        logger.info("")
+        logger.info("Timing Comparison:")
+        logger.info("Expected word timings vs detected speech segments:")
+        for i, word in enumerate(sample_words):
+            # Find closest speech segment
+            closest_seg = None
+            min_distance = float("inf")
+            for seg in actual_speech_segments:
+                # Distance from word start to segment start
+                dist = abs(word["start_sec"] - seg["start"])
+                if dist < min_distance:
+                    min_distance = dist
+                    closest_seg = seg
+            
+            if closest_seg:
+                offset = word["start_sec"] - closest_seg["start"]
+                logger.info(
+                    "  word %d '%s': expected %.2fs, actual speech starts %.2fs (offset: %+.2fs)",
+                    i + 1,
+                    word["text"],
+                    word["start_sec"],
+                    closest_seg["start"],
+                    offset,
+                )
     
     return 0
