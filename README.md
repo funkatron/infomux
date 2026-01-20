@@ -307,6 +307,57 @@ infomux resume --dry-run run-XXXXX
 - Clears failed step records before re-running
 - Uses the same pipeline and input as the original run
 
+### `infomux cleanup`
+
+Remove orphaned or unwanted runs from the runs directory.
+
+```bash
+# Preview what would be deleted (always use this first!)
+infomux cleanup --dry-run --orphaned
+
+# Delete runs without valid job.json files
+infomux cleanup --force --orphaned
+
+# Delete stuck runs (status: running)
+infomux cleanup --force --status running
+
+# Delete runs older than 30 days
+infomux cleanup --force --older-than 30d
+
+# Delete failed runs older than 7 days (safety check)
+infomux cleanup --force --status failed --older-than 7d --min-age 1d
+
+# Combine filters: delete orphaned runs and stuck runs
+infomux cleanup --force --orphaned --status running
+```
+
+**Filters:**
+- `--orphaned`: Delete runs without valid `job.json` files
+- `--status <status>`: Delete runs with specific status (`pending`, `running`, `failed`, `interrupted`, `completed`)
+- `--older-than <time>`: Delete runs older than specified time (e.g., `30d`, `2w`, `1m`)
+
+**Safety:**
+- Always use `--dry-run` first to preview what would be deleted
+- `--force` is required to actually delete (prevents accidental deletion)
+- `--min-age` can be used as a safety check to prevent deleting very recent runs
+
+**Time specifications:**
+- `d` = days (e.g., `30d` = 30 days)
+- `w` = weeks (e.g., `2w` = 2 weeks)
+- `m` = months (e.g., `1m` = 30 days)
+
+**Example output:**
+```
+Would delete 4 run(s):
+
+  run-20260111-025200-449ae0 (status: running)
+  run-20260111-025752-b546d0 (status: running)
+  run-20260111-025832-99d059 (status: running)
+  run-20260113-002114-f80d18 (status: running)
+
+Run with --force to actually delete these runs.
+```
+
 ### `infomux stream`
 
 Real-time audio capture and transcription from a microphone.

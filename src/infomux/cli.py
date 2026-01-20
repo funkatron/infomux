@@ -12,6 +12,7 @@ import sys
 from typing import TYPE_CHECKING
 
 from infomux import __version__
+from infomux.commands import cleanup as cleanup_cmd
 from infomux.commands import inspect as inspect_cmd
 from infomux.commands import resume as resume_cmd
 from infomux.commands import run as run_cmd
@@ -106,6 +107,14 @@ Environment:
     )
     stream_cmd.configure_parser(stream_parser)
 
+    # cleanup subcommand
+    cleanup_parser = subparsers.add_parser(
+        "cleanup",
+        help="Remove orphaned or unwanted runs",
+        description="Clean up the runs directory by removing orphaned runs, stuck runs, or runs matching specific criteria.",
+    )
+    cleanup_cmd.configure_parser(cleanup_parser)
+
     return parser
 
 
@@ -146,6 +155,8 @@ def main(argv: list[str] | None = None) -> int:
             return resume_cmd.execute(args)
         elif args.command == "stream":
             return stream_cmd.execute(args)
+        elif args.command == "cleanup":
+            return cleanup_cmd.execute(args)
         else:
             # This shouldn't happen due to required=True on subparsers
             parser.print_help(sys.stderr)
