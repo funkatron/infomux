@@ -77,6 +77,21 @@ def _generate_report(data: RunData) -> str:
                 lines.append(f"| {time_str} | {text} |")
         lines.append("")
 
+    # Artifacts (if available)
+    artifacts = data.job_json.get("artifacts", [])
+    if artifacts:
+        # Filter for video files
+        video_files = [a for a in artifacts if Path(a).suffix.lower() in {".mp4", ".mov", ".avi", ".mkv"}]
+        if video_files:
+            lines.append("---")
+            lines.append("")
+            lines.append("## Generated Files")
+            lines.append("")
+            for artifact in video_files:
+                artifact_name = Path(artifact).name
+                lines.append(f"- `{artifact_name}` (video with subtitles)")
+            lines.append("")
+
     # Footer
     lines.append("---")
     lines.append("")

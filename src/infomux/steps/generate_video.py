@@ -323,11 +323,11 @@ class GenerateVideoStep:
             f"-map", f"{subtitle_input_idx}:s",  # Map subtitles from subtitle input (soft subs)
             "-vf", vf,  # Apply video filter (burns in subtitles on video)
         ])
-        
+
         # Only use -shortest if we couldn't determine duration
         if duration is None:
             cmd.append("-shortest")  # End when shortest input ends (audio)
-        
+
         # Add encoding options
         cmd.extend([
             "-c:a", "aac",  # Encode audio as AAC for MP4
