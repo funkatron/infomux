@@ -147,12 +147,40 @@ class GenerateLyricVideoStep:
             )
 
         logger.info("parsed %d words from transcript.json", len(words))
+        
+        # Check for potential timing issues
+        if words:
+            first_word_start = words[0].start_ms / 1000.0
+            last_word_end = words[-1].end_ms / 1000.0
+            logger.info(
+                "word timing range: %.3f - %.3f seconds (%.2f seconds total)",
+                first_word_start,
+                last_word_end,
+                last_word_end - first_word_start,
+            )
+            
+            # Check if first word starts at 0 (might indicate timing offset)
+            if first_word_start > 0.1:
+                logger.debug(
+                    "first word starts at %.3fs (not at 0.0s) - this is normal if transcription had initial silence",
+                    first_word_start,
+                )
 
         # Get audio duration
         audio_duration = None
         try:
             audio_duration = self._get_audio_duration(tools.ffmpeg, input_path)
             logger.debug("audio duration: %.2f seconds", audio_duration)
+            
+            # Warn if word timings extend beyond audio duration
+            if words and audio_duration:
+                last_word_end = words[-1].end_ms / 1000.0
+                if last_word_end > audio_duration + 0.5:
+                    logger.warning(
+                        "word timings extend beyond audio duration: last word ends at %.2fs but audio is %.2fs",
+                        last_word_end,
+                        audio_duration,
+                    )
         except StepError as e:
             logger.warning(
                 "Could not determine audio duration: %s. Using -shortest fallback.", e
@@ -910,16 +938,31 @@ class GenerateLyricVideoStep:
             end_sec = pw.word.end_ms / 1000.0
             
             # Log first few words for timing debugging
-            if i < 5:
+            if i < 10:
                 logger.debug(
-                    "word %d: '%s' timing %.3f-%.3f (from JSON: %d-%d ms)",
+                    "word %d: '%s' at (x=%d, y=%d) timing %.3f-%.3f (from JSON: %d-%d ms)",
                     i + 1,
                     pw.word.text,
+                    pw.x,
+                    pw.y,
                     start_sec,
                     end_sec,
                     pw.word.start_ms,
                     pw.word.end_ms,
                 )
+            
+            # Check for overlapping words at the same time
+            if i > 0:
+                prev_pw = word_image_paths[i - 1][0]
+                prev_end = prev_pw.word.end_ms / 1000.0
+                if start_sec < prev_end:
+                    logger.debug(
+                        "word '%s' overlaps with previous word '%s' (%.3f < %.3f)",
+                        pw.word.text,
+                        prev_pw.word.text,
+                        start_sec,
+                        prev_end,
+                    )
             
             # Build overlay filter with enable expression
             # overlay=x=X:y=Y:enable='between(t,START,END)'
