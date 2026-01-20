@@ -120,7 +120,7 @@ class AlignLyricsStep:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             raise StepError(
                 self.name,
-                "aeneas not found. Install via: uv pip install aeneas",
+                "aeneas not found. Install via: uv pip install numpy && uv pip install aeneas",
             )
 
         # Prepare temporary files
@@ -196,7 +196,7 @@ class AlignLyricsStep:
 
         except FileNotFoundError:
             raise StepError(
-                self.name, "aeneas not found. Install via: uv pip install aeneas"
+                self.name, "aeneas not found. Install via: uv pip install numpy && uv pip install aeneas"
             )
         except subprocess.SubprocessError as e:
             raise StepError(self.name, f"subprocess error: {e}")
