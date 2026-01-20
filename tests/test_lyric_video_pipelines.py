@@ -3,8 +3,7 @@ Functional tests for lyric video pipelines.
 
 Tests pipeline execution with vocal isolation and forced alignment:
 - lyric-video-vocals: isolate_vocals → transcribe_timed → extract_audio → generate_lyric_video
-- lyric-video-aligned: extract_audio → align_lyrics → generate_lyric_video
-- lyric-video-aligned-vocals: isolate_vocals → align_lyrics → extract_audio → generate_lyric_video
+- lyric-video-aligned: isolate_vocals → align_lyrics → extract_audio → generate_lyric_video
 
 Test example: "These Days" by Dogtablet
 Note: Full execution tests are skipped by default as they require:
@@ -204,27 +203,17 @@ Five times by design. I'm still alive."""
         """Aligned pipeline is registered and accessible."""
         pipeline = get_pipeline("lyric-video-aligned")
         assert pipeline.name == "lyric-video-aligned"
-        assert len(pipeline.steps) == 3
+        assert len(pipeline.steps) == 4  # Includes isolate_vocals
 
-    def test_aligned_isolated_pipeline_exists(self) -> None:
-        """Aligned isolated pipeline is registered and accessible."""
-        pipeline = get_pipeline("lyric-video-aligned-vocals")
-        assert pipeline.name == "lyric-video-aligned-vocals"
+    def test_aligned_pipeline_has_isolation(self) -> None:
+        """Aligned pipeline includes vocal isolation."""
+        pipeline = get_pipeline("lyric-video-aligned")
+        assert "isolate_vocals" in pipeline.step_names()
         assert len(pipeline.steps) == 4
 
     def test_aligned_pipeline_steps_order(self) -> None:
         """Aligned pipeline steps are in correct order."""
         pipeline = get_pipeline("lyric-video-aligned")
-        step_names = pipeline.step_names()
-        assert step_names == [
-            "extract_audio",
-            "align_lyrics",
-            "generate_lyric_video",
-        ]
-
-    def test_aligned_isolated_pipeline_steps_order(self) -> None:
-        """Aligned isolated pipeline steps are in correct order."""
-        pipeline = get_pipeline("lyric-video-aligned-vocals")
         step_names = pipeline.step_names()
         assert step_names == [
             "isolate_vocals",
@@ -233,25 +222,27 @@ Five times by design. I'm still alive."""
             "generate_lyric_video",
         ]
 
+
     def test_aligned_pipeline_step_dependencies(self) -> None:
         """Aligned pipeline steps have correct input dependencies."""
         pipeline = get_pipeline("lyric-video-aligned")
+
+        isolate_vocals = pipeline.get_step("isolate_vocals")
+        assert isolate_vocals is not None
+        assert isolate_vocals.input_from is None  # Uses original input
+
+        align_lyrics = pipeline.get_step("align_lyrics")
+        assert align_lyrics is not None
+        assert align_lyrics.input_from == "isolate_vocals"  # Aligns to isolated vocals (better accuracy)
 
         extract_audio = pipeline.get_step("extract_audio")
         assert extract_audio is not None
         assert extract_audio.input_from is None  # Uses original input
 
-        align_lyrics = pipeline.get_step("align_lyrics")
-        assert align_lyrics is not None
-        assert align_lyrics.input_from == "extract_audio"  # Aligns to extracted audio
-
         generate_lyric_video = pipeline.get_step("generate_lyric_video")
         assert generate_lyric_video is not None
         assert generate_lyric_video.input_from == "extract_audio"  # Uses extracted audio (with music)
 
-    def test_aligned_isolated_pipeline_step_dependencies(self) -> None:
-        """Aligned isolated pipeline steps have correct input dependencies."""
-        pipeline = get_pipeline("lyric-video-aligned-vocals")
 
         isolate_vocals = pipeline.get_step("isolate_vocals")
         assert isolate_vocals is not None
@@ -365,7 +356,7 @@ Five times by design. I'm still alive."""
         job = JobEnvelope.create(input_file=input_file)
         
         # Get pipeline
-        pipeline = get_pipeline("lyric-video-aligned-vocals")
+        pipeline = get_pipeline("lyric-video-aligned")
         
         # Create run directory
         run_dir = tmp_path / "runs" / job.id

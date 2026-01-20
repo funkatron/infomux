@@ -844,10 +844,10 @@ uv pip install --no-build-isolation aeneas
 
 **Note:** aeneas 1.7.3 is incompatible with numpy 2.x. Install numpy < 2.0 first. On macOS, set the library paths so the linker can find espeak.
 
-Then use the `lyric-video-aligned` or `lyric-video-aligned-vocals` pipeline with a lyrics file:
+Then use the `lyric-video-aligned` pipeline with a lyrics file:
 
 ```bash
-uv run infomux run --pipeline lyric-video-aligned-vocals --lyrics-file lyrics.txt <your-audio-file>
+uv run infomux run --pipeline lyric-video-aligned --lyrics-file lyrics.txt <your-audio-file>
 ```
 
 ---
@@ -919,7 +919,7 @@ src/infomux/
 - `transcribe`, `summarize`, `timed`, `report`, `report-store`
 - `caption`, `caption-burn` — video subtitle embedding
 - `lyric-video`, `lyric-video-vocals` — word-level lyric videos
-- `lyric-video-aligned`, `lyric-video-aligned-vocals` — forced alignment (requires aeneas)
+- `lyric-video-aligned` — forced alignment with vocal isolation (requires aeneas)
 
 **Streaming:**
 - Real-time audio capture and transcription
