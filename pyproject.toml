@@ -38,14 +38,11 @@ ocr = [
     # pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
     # Or use the Metal-accelerated version for better performance
 ]
-lyrics-alignment = [
-    "numpy>=1.9.0",  # Required by aeneas (must be installed first)
-    "aeneas>=1.7.3",  # Forced alignment for official lyrics
-    # Note: aeneas requires numpy to be installed BEFORE building
-    # Manual install: uv pip install numpy && uv pip install aeneas
-    # System dependencies: ffmpeg, espeak (brew install espeak on macOS)
-    # Install: uv pip install -e ".[lyrics-alignment]"
-]
+# Note: aeneas (for forced alignment) cannot be included in optional dependencies
+# because it requires numpy to be installed BEFORE building, which breaks dependency resolution.
+# Install manually: uv pip install numpy && uv pip install aeneas
+# System dependencies: ffmpeg, espeak (brew install espeak on macOS)
+# See README for full installation instructions
 
 [project.scripts]
 infomux = "infomux.cli:main"
