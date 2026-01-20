@@ -236,6 +236,24 @@ class TestEmbedSubsStep:
 
             assert "video not found" in str(exc_info.value)
 
+    def test_raises_when_audio_only_input(self, tmp_path: Path) -> None:
+        """Raises StepError when input is audio-only (not video)."""
+        audio_file = tmp_path / "audio.mp3"
+        audio_file.touch()
+        srt_file = tmp_path / "transcript.srt"
+        srt_file.write_text("1\n00:00:00,000 --> 00:00:01,000\nHello")
+
+        with patch("infomux.steps.embed_subs.get_tool_paths") as mock_tools:
+            mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
+
+            step = EmbedSubsStep()
+            with pytest.raises(StepError) as exc_info:
+                step.execute(audio_file, tmp_path)
+
+            error_msg = str(exc_info.value)
+            assert "audio-only" in error_msg.lower()
+            assert "audio-to-video" in error_msg.lower()
+
 
 class TestRunFunction:
     """Tests for the run() convenience function."""
