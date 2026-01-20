@@ -269,6 +269,22 @@ AUDIO_TO_VIDEO_PIPELINE = PipelineDef(
     ],
 )
 
+# Web content pipeline: extract text from HTML and summarize
+WEB_SUMMARIZE_PIPELINE = PipelineDef(
+    name="web-summarize",
+    description="Extract text from web page and summarize with LLM",
+    steps=[
+        StepDef(
+            name="extract_text",
+            input_from=None,  # Uses original input file (HTML/text)
+        ),
+        StepDef(
+            name="summarize",
+            input_from="extract_text",  # Uses transcript.txt
+        ),
+    ],
+)
+
 # Available pipelines
 PIPELINES: dict[str, PipelineDef] = {
     "transcribe": DEFAULT_PIPELINE,
@@ -279,6 +295,10 @@ PIPELINES: dict[str, PipelineDef] = {
     "report": REPORT_PIPELINE,
     "report-store": REPORT_STORE_PIPELINE,
     "audio-to-video": AUDIO_TO_VIDEO_PIPELINE,
+    "web-summarize": WEB_SUMMARIZE_PIPELINE,
+    # Future pipelines (see docs/FUTURE_PLANS.md):
+    # "image-summarize": Extract text from images (OCR) → summarize
+    # "document-summarize": Extract text from documents (PDF/DOCX/images) → summarize
 }
 
 
