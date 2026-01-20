@@ -200,6 +200,9 @@ infomux run --pipeline report-store weekly-standup.mp4
 # List all available pipelines
 infomux run --list-pipelines
 
+# List all available steps
+infomux run --list-steps
+
 # Preview what would happen (no actual processing)
 infomux run --dry-run my-file.mp4
 
@@ -366,6 +369,9 @@ Stopping: stop word 'stop recording'
 ```bash
 # List available pipelines
 infomux run --list-pipelines
+
+# List available steps
+infomux run --list-steps
 ```
 
 ### Steps
@@ -737,7 +743,7 @@ src/infomux/
 - Run storage under `~/.local/share/infomux/runs/`
 - Pipeline definitions as data (`PipelineDef`, `StepDef`)
 - Auto-discovery of steps from `steps/` directory
-- `--pipeline`, `--list-pipelines`, `--steps`, `--dry-run`, `--check-deps` flags
+- `--pipeline`, `--list-pipelines`, `--list-steps`, `--steps`, `--dry-run`, `--check-deps` flags
 
 **Steps:**
 - `extract_audio` — ffmpeg → 16kHz mono WAV
