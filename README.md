@@ -827,8 +827,9 @@ The `align_lyrics` step requires aeneas for forced alignment when you have offic
 # Install system dependency (macOS)
 brew install espeak
 
-# Install Python dependencies (numpy must be installed first)
-uv pip install numpy
+# Install Python dependencies
+# Note: aeneas 1.7.3 requires numpy < 2.0 (numpy 2.x removed fromstring)
+uv pip install "numpy<2.0"
 
 # Set library paths for aeneas build (macOS)
 export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:$PKG_CONFIG_PATH"
@@ -841,7 +842,7 @@ uv pip install --no-build-isolation aeneas
 # Linux: Install espeak: sudo apt-get install espeak (or equivalent)
 ```
 
-**Note:** aeneas requires numpy to be installed before building, and espeak library for C extensions. On macOS, set the library paths so the linker can find espeak.
+**Note:** aeneas 1.7.3 is incompatible with numpy 2.x. Install numpy < 2.0 first. On macOS, set the library paths so the linker can find espeak.
 
 Then use the `lyric-video-aligned` or `lyric-video-aligned-vocals` pipeline with a lyrics file:
 

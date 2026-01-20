@@ -109,10 +109,51 @@ class AlignLyricsStep:
         except Exception as e:
             raise StepError(self.name, f"failed to read lyrics file: {e}")
 
-        # Check if aeneas is available
+        # Convert audio to a format aeneas can read (44.1kHz mono 16-bit PCM)
+        # aeneas prefers higher sample rates and may have issues with 16kHz
+        tools = get_tool_paths()
+        if not tools.ffmpeg:
+            raise StepError(self.name, "ffmpeg not found")
+        
+        # Create a temporary converted audio file for aeneas
+        temp_audio = output_dir / "audio_for_alignment.wav"
+        convert_cmd = [
+            str(tools.ffmpeg),
+            "-y",
+            "-i", str(input_path),
+            "-ac", "1",  # Mono
+            "-ar", "44100",  # 44.1kHz (aeneas prefers this)
+            "-c:a", "pcm_s16le",  # 16-bit PCM
+            str(temp_audio),
+        ]
+        
+        logger.debug("converting audio for aeneas: %s", " ".join(convert_cmd))
+        convert_result = subprocess.run(
+            convert_cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        
+        if convert_result.returncode != 0:
+            logger.error("ffmpeg conversion failed: %s", convert_result.stderr[-500:])
+            raise StepError(
+                self.name,
+                f"failed to convert audio for aeneas: {convert_result.returncode}",
+            )
+        
+        if not temp_audio.exists():
+            raise StepError(self.name, "converted audio file not created")
+        
+        # Use the converted audio file for alignment
+        audio_for_alignment = temp_audio
+
+        # Check if aeneas is available (use sys.executable to use the same Python as the script)
+        import sys
+        python_exe = sys.executable
         try:
             result = subprocess.run(
-                ["python", "-m", "aeneas.tools.execute_task", "--help"],
+                [python_exe, "-m", "aeneas.tools.execute_task", "--help"],
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -145,10 +186,10 @@ class AlignLyricsStep:
         )
 
         cmd = [
-            "python",
+            python_exe,  # Use the same Python executable
             "-m",
             "aeneas.tools.execute_task",
-            str(input_path),
+            str(audio_for_alignment),  # Use converted audio
             str(lyrics_path),
             config_string,
             str(temp_syncmap),
@@ -157,6 +198,11 @@ class AlignLyricsStep:
 
         logger.debug("running: %s", " ".join(cmd))
 
+        # Set environment variables for aeneas (UTF-8 encoding, etc.)
+        import os
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "UTF-8"
+        
         try:
             result = subprocess.run(
                 cmd,
@@ -164,6 +210,7 @@ class AlignLyricsStep:
                 text=True,
                 check=False,
                 cwd=output_dir,
+                env=env,
             )
 
             if result.returncode != 0:
@@ -192,9 +239,11 @@ class AlignLyricsStep:
             output_path = output_dir / TRANSCRIPT_JSON_FILENAME
             self._convert_syncmap_to_transcript_json(temp_syncmap, lyrics_text, output_path)
 
-            # Clean up temporary file
+            # Clean up temporary files
             if temp_syncmap.exists():
                 temp_syncmap.unlink()
+            if temp_audio.exists():
+                temp_audio.unlink()
 
             if not output_path.exists():
                 raise StepError(self.name, f"output file not created: {output_path}")
