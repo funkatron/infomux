@@ -41,8 +41,9 @@ ocr = [
 alignment = [
     "numpy>=1.9.0",  # Required by aeneas (must be installed first)
     "aeneas>=1.7.3",  # Forced alignment for official lyrics
-    # System dependencies: ffmpeg, espeak
-    # Install: uv pip install -e ".[alignment]"
+    # Note: aeneas requires numpy to be installed BEFORE building
+    # Manual install: uv pip install numpy && uv pip install aeneas
+    # System dependencies: ffmpeg, espeak (brew install espeak on macOS)
 ]
 
 [project.scripts]

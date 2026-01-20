@@ -813,10 +813,31 @@ uv pip install demucs
 uv pip install spleeter
 ```
 
-Then use the `lyric-video-isolated` pipeline:
+Then use the `lyric-video-vocals` pipeline:
 
 ```bash
-uv run infomux run --pipeline lyric-video-isolated <your-audio-file>
+uv run infomux run --pipeline lyric-video-vocals <your-audio-file>
+```
+
+### `aeneas not found` (for forced alignment)
+
+The `align_lyrics` step requires aeneas for forced alignment when you have official lyrics:
+
+```bash
+# Install system dependency (macOS)
+brew install espeak
+
+# Install Python dependencies (numpy must be installed first)
+uv pip install numpy
+uv pip install aeneas
+```
+
+**Note:** aeneas requires numpy to be installed before building. Install them separately as shown above.
+
+Then use the `lyric-video-aligned` or `lyric-video-aligned-vocals` pipeline with a lyrics file:
+
+```bash
+uv run infomux run --pipeline lyric-video-aligned-vocals --lyrics-file lyrics.txt <your-audio-file>
 ```
 
 ---
@@ -887,7 +908,8 @@ src/infomux/
 **Pipelines:**
 - `transcribe`, `summarize`, `timed`, `report`, `report-store`
 - `caption`, `caption-burn` — video subtitle embedding
-- `lyric-video`, `lyric-video-isolated` — word-level lyric videos
+- `lyric-video`, `lyric-video-vocals` — word-level lyric videos
+- `lyric-video-aligned`, `lyric-video-aligned-vocals` — forced alignment (requires aeneas)
 
 **Streaming:**
 - Real-time audio capture and transcription
