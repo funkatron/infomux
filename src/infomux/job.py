@@ -90,6 +90,7 @@ class StepRecord:
         error: Error message if the step failed.
         outputs: List of output artifact paths produced by this step.
         model_info: Model and generation parameters (for LLM steps).
+        process_id: Process ID of the running step (if currently running).
     """
 
     name: str
@@ -100,6 +101,7 @@ class StepRecord:
     error: str | None = None
     outputs: list[str] = field(default_factory=list)
     model_info: dict[str, Any] | None = None
+    process_id: int | None = None
 
 
 @dataclass

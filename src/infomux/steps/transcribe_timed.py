@@ -129,8 +129,26 @@ def _generate_word_level_srt(json_path: Path, output_path: Path) -> None:
         json_path: Path to transcript.json file.
         output_path: Path to write word-level SRT file.
     """
-    with open(json_path) as f:
-        data = json.load(f)
+    try:
+        with open(json_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except UnicodeDecodeError as e:
+        # Try reading with error handling for invalid UTF-8 bytes
+        logger.warning(
+            "UTF-8 decode error reading transcript.json at position %d-%d, "
+            "attempting recovery with error replacement",
+            e.start,
+            e.end,
+        )
+        try:
+            with open(json_path, encoding="utf-8", errors="replace") as f:
+                data = json.load(f)
+        except json.JSONDecodeError as json_err:
+            logger.error("Failed to parse transcript.json after encoding recovery: %s", json_err)
+            return
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse transcript.json: %s", e)
+        return
 
     transcription = data.get("transcription", [])
     if not transcription:
@@ -254,8 +272,26 @@ def _generate_word_level_vtt(json_path: Path, output_path: Path) -> None:
         json_path: Path to transcript.json file.
         output_path: Path to write word-level VTT file.
     """
-    with open(json_path) as f:
-        data = json.load(f)
+    try:
+        with open(json_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except UnicodeDecodeError as e:
+        # Try reading with error handling for invalid UTF-8 bytes
+        logger.warning(
+            "UTF-8 decode error reading transcript.json at position %d-%d, "
+            "attempting recovery with error replacement",
+            e.start,
+            e.end,
+        )
+        try:
+            with open(json_path, encoding="utf-8", errors="replace") as f:
+                data = json.load(f)
+        except json.JSONDecodeError as json_err:
+            logger.error("Failed to parse transcript.json after encoding recovery: %s", json_err)
+            return
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse transcript.json: %s", e)
+        return
 
     transcription = data.get("transcription", [])
     if not transcription:

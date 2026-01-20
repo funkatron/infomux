@@ -185,6 +185,50 @@ def configure_parser(parser: ArgumentParser) -> None:
         help="Video dimensions for video generation (default: 1920x1080). "
         "Format: WIDTHxHEIGHT (e.g., 1280x720). Requires audio-to-video pipeline.",
     )
+    parser.add_argument(
+        "--lyric-font-name",
+        type=str,
+        default=None,
+        help="Font family name for lyric video (default: Arial). "
+        "Requires lyric-video pipeline.",
+    )
+    parser.add_argument(
+        "--lyric-font-file",
+        type=Path,
+        default=None,
+        help="Path to font file for lyric video (overrides --lyric-font-name). "
+        "Requires lyric-video pipeline.",
+    )
+    parser.add_argument(
+        "--lyric-font-size",
+        type=int,
+        default=None,
+        help="Font size in pixels for lyric video (default: 48). "
+        "Requires lyric-video pipeline.",
+    )
+    parser.add_argument(
+        "--lyric-font-color",
+        type=str,
+        default=None,
+        help="Text color for lyric video (default: white). "
+        "Can be a color name (e.g., 'yellow') or hex code (e.g., '#FFFF00'). "
+        "Requires lyric-video pipeline.",
+    )
+    parser.add_argument(
+        "--lyric-position",
+        type=str,
+        default=None,
+        choices=["top", "center", "bottom"],
+        help="Vertical position for lyrics (default: center). "
+        "Requires lyric-video pipeline.",
+    )
+    parser.add_argument(
+        "--lyric-word-spacing",
+        type=int,
+        default=None,
+        help="Horizontal spacing between words in pixels (default: 20). "
+        "Requires lyric-video pipeline.",
+    )
 
 
 def execute(args: Namespace) -> int:
@@ -386,6 +430,39 @@ def execute(args: Namespace) -> int:
             generate_video_config["video_size"] = args.video_size
         step_configs["generate_video"] = generate_video_config
 
+    # Lyric video generation config
+    if any([
+        args.lyric_font_name,
+        args.lyric_font_file,
+        args.lyric_font_size,
+        args.lyric_font_color,
+        args.lyric_position,
+        args.lyric_word_spacing,
+    ]):
+        lyric_video_config = step_configs.get("generate_lyric_video", {})
+        if args.lyric_font_name:
+            lyric_video_config["font_name"] = args.lyric_font_name
+        if args.lyric_font_file:
+            lyric_video_config["font_file"] = str(args.lyric_font_file)
+        if args.lyric_font_size:
+            lyric_video_config["font_size"] = args.lyric_font_size
+        if args.lyric_font_color:
+            lyric_video_config["font_color"] = args.lyric_font_color
+        if args.lyric_position:
+            lyric_video_config["position"] = args.lyric_position
+        if args.lyric_word_spacing:
+            lyric_video_config["word_spacing"] = args.lyric_word_spacing
+        step_configs["generate_lyric_video"] = lyric_video_config
+
+    # Also allow video-size and background-color to apply to lyric-video
+    if args.video_size or args.video_background_color:
+        lyric_video_config = step_configs.get("generate_lyric_video", {})
+        if args.video_size:
+            lyric_video_config["video_size"] = args.video_size
+        if args.video_background_color:
+            lyric_video_config["background_color"] = args.video_background_color
+        step_configs["generate_lyric_video"] = lyric_video_config
+
     # Execute pipeline
     success = run_pipeline(
         job, run_dir, pipeline=pipeline, step_names=step_names, step_configs=step_configs
@@ -467,7 +544,7 @@ def _check_dependencies() -> int:
             gpu_status = " (CUDA GPU)"
         else:
             gpu_status = " (CPU only)"
-        
+
         easyocr_available = True
         print(f"✓ EasyOCR: available{gpu_status} (optional, better quality)")
     except ImportError:

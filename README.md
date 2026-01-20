@@ -29,6 +29,13 @@ infomux run --pipeline caption my-song.mp4
 infomux run --pipeline audio-to-video voice-note.m4a
 # → video with burned-in subtitles (great for sharing!)
 
+# Generate lyric video with word-level burned subtitles
+infomux run --pipeline lyric-video song.mp3
+# → video with each word appearing at its exact timing
+
+# Customize lyric video appearance
+infomux run --pipeline lyric-video --lyric-font-size 60 --lyric-font-color yellow --lyric-position top song.mp3
+
 # Full analysis: transcript + timestamps + summary + database
 infomux run --pipeline report-store interview.m4a
 # → all outputs + indexed in searchable SQLite
@@ -193,6 +200,13 @@ infomux run --pipeline audio-to-video --video-background-color blue --video-size
 
 # Use custom background image
 infomux run --pipeline audio-to-video --video-background-image ~/Pictures/bg.png audio.m4a
+
+# Generate lyric video with word-level burned subtitles
+infomux run --pipeline lyric-video song.mp3
+
+# Customize lyric video appearance
+infomux run --pipeline lyric-video --lyric-font-size 60 --lyric-font-color yellow --lyric-position top song.mp3
+infomux run --pipeline lyric-video --lyric-font-name "Helvetica" --lyric-word-spacing 30 song.mp3
 
 # Full analysis with searchable database
 infomux run --pipeline report-store weekly-standup.mp4
@@ -444,6 +458,7 @@ Stopping: stop word 'stop recording'
 | `caption` | Soft subtitles (toggleable) | extract_audio → transcribe_timed → embed_subs |
 | `caption-burn` | Burned-in subtitles (permanent) | extract_audio → transcribe_timed → embed_subs |
 | `audio-to-video` | Generate video from audio with burned subtitles | extract_audio → transcribe_timed → generate_video |
+| `lyric-video` | Generate lyric video with word-level burned subtitles | extract_audio → transcribe_timed → generate_lyric_video |
 
 ```bash
 # List available pipelines
@@ -463,6 +478,7 @@ infomux inspect --list-steps
 | `summarize` | `transcript.txt` | `summary.md` | Ollama (chunked for long input) |
 | `embed_subs` | video + `.srt` | `video_captioned.mp4` | ffmpeg |
 | `generate_video` | audio + `.srt` | `audio_with_subs.mp4` | ffmpeg |
+| `generate_lyric_video` | audio + `transcript.json` | `audio_lyric_video.mp4` | ffmpeg |
 | `store_json` | run directory | `report.json` | (built-in) |
 | `store_markdown` | run directory | `report.md` | (built-in) |
 | `store_sqlite` | run directory | → `infomux.db` | sqlite3 |
@@ -494,6 +510,12 @@ input.m4a → [extract_audio] → audio.wav → [transcribe_timed] → transcrip
                                                                     ↓
                                                           [generate_video] → audio_with_subs.mp4
                                                           (solid color or image background)
+
+# lyric-video pipeline (word-level lyric video)
+input.m4a → [extract_audio] → audio.wav → [transcribe_timed] → transcript.json (word-level)
+                                                                    ↓
+                                                          [generate_lyric_video] → audio_lyric_video.mp4
+                                                          (each word appears at exact timing)
 ```
 
 ### Pipeline Artifacts

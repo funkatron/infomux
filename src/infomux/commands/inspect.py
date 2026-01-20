@@ -208,11 +208,41 @@ def _list_runs(output_json: bool = False) -> int:
                     "interrupted": "⚠",
                 }.get(job.status, "?")
                 
-                # Format date (just date part, not full timestamp)
+                # Format timestamps
                 created_date = job.created_at.split("T")[0] if "T" in job.created_at else job.created_at[:10]
+                
+                # Get precise start/stop times
+                start_time = None
+                stop_time = None
+                if job.created_at:
+                    try:
+                        from datetime import datetime
+                        start_dt = datetime.fromisoformat(job.created_at.replace("Z", "+00:00"))
+                        start_time = start_dt.strftime("%H:%M:%S")
+                    except (ValueError, AttributeError):
+                        pass
+                
+                if job.updated_at and job.status in ("completed", "failed", "interrupted"):
+                    try:
+                        from datetime import datetime
+                        stop_dt = datetime.fromisoformat(job.updated_at.replace("Z", "+00:00"))
+                        stop_time = stop_dt.strftime("%H:%M:%S")
+                    except (ValueError, AttributeError):
+                        pass
                 
                 # Pipeline name
                 pipeline_name = job.config.get("pipeline", "?")
+                
+                # Current step (if running)
+                current_step = None
+                process_id = None
+                if job.status == "running":
+                    # Find the currently running step
+                    for step in job.steps:
+                        if step.status == "running":
+                            current_step = step.name
+                            process_id = step.process_id
+                            break
                 
                 # Input file name
                 input_name = "?"
@@ -234,7 +264,11 @@ def _list_runs(output_json: bool = False) -> int:
                     "id": run_id,
                     "status": job.status,
                     "date": created_date,
+                    "start_time": start_time,
+                    "stop_time": stop_time,
                     "pipeline": pipeline_name,
+                    "current_step": current_step,
+                    "process_id": process_id,
                     "input": input_name,
                     "artifacts": artifact_count,
                 })
@@ -258,38 +292,74 @@ def _list_runs(output_json: bool = False) -> int:
             max_status_len = max(len(r["status"]) for r in rows)
             max_pipeline_len = max(len(r["pipeline"]) for r in rows)
             max_input_len = max(len(r["input"]) for r in rows)
+            max_step_len = max(len(r["current_step"] or "") for r in rows)
             
             # Ensure minimum widths for headers
             max_id_len = max(max_id_len, len("Run ID"))
             max_status_len = max(max_status_len, len("Status"))
             max_pipeline_len = max(max_pipeline_len, len("Pipeline"))
             max_input_len = max(max_input_len, len("Input"))
+            max_step_len = max(max_step_len, len("Step"))
             
-            # Header
-            header = (
-                f"{'':2} "
-                f"{'Run ID':<{max_id_len}} "
-                f"{'Status':<{max_status_len}} "
-                f"{'Date':<10} "
-                f"{'Pipeline':<{max_pipeline_len}} "
-                f"{'Input':<{max_input_len}} "
-                f"{'Artifacts':>9}"
-            )
+            # Build header - include times and step/PID for running jobs
+            header_parts = [
+                f"{'':2}",
+                f"{'Run ID':<{max_id_len}}",
+                f"{'Status':<{max_status_len}}",
+                f"{'Date':<10}",
+                f"{'Start':<8}",
+                f"{'Stop':<8}",
+                f"{'Pipeline':<{max_pipeline_len}}",
+            ]
+            
+            # Add step/PID columns if any running jobs
+            has_running = any(r["status"] == "running" for r in rows)
+            if has_running:
+                header_parts.extend([
+                    f"{'Step':<{max_step_len}}",
+                    f"{'PID':>6}",
+                ])
+            
+            header_parts.extend([
+                f"{'Input':<{max_input_len}}",
+                f"{'Artifacts':>9}",
+            ])
+            
+            header = " ".join(header_parts)
             print(header)
             print("-" * len(header))
             
             # Rows
             for row in rows:
+                start_str = row["start_time"] or "-"
+                stop_str = row["stop_time"] or "-"
                 artifacts_str = str(row["artifacts"]) if row["artifacts"] > 0 else "-"
-                print(
-                    f"{row['icon']:2} "
-                    f"{row['id']:<{max_id_len}} "
-                    f"{row['status']:<{max_status_len}} "
-                    f"{row['date']:<10} "
-                    f"{row['pipeline']:<{max_pipeline_len}} "
-                    f"{row['input']:<{max_input_len}} "
-                    f"{artifacts_str:>9}"
-                )
+                
+                row_parts = [
+                    f"{row['icon']:2}",
+                    f"{row['id']:<{max_id_len}}",
+                    f"{row['status']:<{max_status_len}}",
+                    f"{row['date']:<10}",
+                    f"{start_str:<8}",
+                    f"{stop_str:<8}",
+                    f"{row['pipeline']:<{max_pipeline_len}}",
+                ]
+                
+                # Add step/PID for running jobs
+                if has_running:
+                    step_str = row["current_step"] or "-"
+                    pid_str = str(row["process_id"]) if row["process_id"] else "-"
+                    row_parts.extend([
+                        f"{step_str:<{max_step_len}}",
+                        f"{pid_str:>6}",
+                    ])
+                
+                row_parts.extend([
+                    f"{row['input']:<{max_input_len}}",
+                    f"{artifacts_str:>9}",
+                ])
+                
+                print(" ".join(row_parts))
             print()
             print(f"Total: {len(rows)} run(s)")
 
