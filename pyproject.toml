@@ -39,10 +39,10 @@ ocr = [
     # Or use the Metal-accelerated version for better performance
 ]
 alignment = [
-    "aeneas>=1.7.3",  # Forced alignment for official lyrics (requires numpy, lxml, BeautifulSoup4)
-    # Note: Install numpy first: uv pip install numpy
-    # Then: uv pip install aeneas
+    "numpy>=1.9.0",  # Required by aeneas (must be installed first)
+    "aeneas>=1.7.3",  # Forced alignment for official lyrics
     # System dependencies: ffmpeg, espeak
+    # Install: uv pip install -e ".[alignment]"
 ]
 
 [project.scripts]
