@@ -829,7 +829,8 @@ uv pip install numpy
 uv pip install --no-build-isolation aeneas
 
 # System dependencies:
-# - macOS: Uses built-in TTS (no additional install needed)
+# - macOS: Install espeak for build (even though we use macOS TTS at runtime):
+#   brew install espeak
 # - Linux: Install espeak: sudo apt-get install espeak (or equivalent)
 ```
 
