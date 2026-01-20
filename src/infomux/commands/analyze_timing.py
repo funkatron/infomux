@@ -85,7 +85,28 @@ def _detect_speech_segments(ffmpeg: Path, audio_path: Path) -> list[dict]:
     Returns:
         List of dicts with start, end times of speech segments
     """
-    # Use silencedetect to find speech segments
+    # Get audio duration first
+    import re
+    duration_cmd = [
+        str(ffmpeg),
+        "-i", str(audio_path),
+        "-f", "null",
+        "-",
+    ]
+    duration_result = subprocess.run(
+        duration_cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    # Parse duration from stderr
+    duration_match = re.search(r"Duration: (\d+):(\d+):(\d+\.\d+)", duration_result.stderr)
+    if not duration_match:
+        return []
+    hours, minutes, seconds = map(float, duration_match.groups())
+    total_duration = hours * 3600 + minutes * 60 + seconds
+    
+    # Use silencedetect to find silence regions
     # -af silencedetect=noise=-30dB:duration=0.3 finds silence below -30dB for 0.3s+
     cmd = [
         str(ffmpeg),
@@ -104,63 +125,45 @@ def _detect_speech_segments(ffmpeg: Path, audio_path: Path) -> list[dict]:
     
     # Parse silencedetect output
     # Format: "silence_start: 1.234" and "silence_end: 5.678 | silence_duration: 4.444"
-    import re
-    segments = []
-    silence_starts = []
-    silence_ends = []
+    silence_regions = []
     
     for line in result.stderr.split("\n"):
         # Find silence_start
         start_match = re.search(r"silence_start: ([\d.]+)", line)
         if start_match:
-            silence_starts.append(float(start_match.group(1)))
+            silence_regions.append({"start": float(start_match.group(1)), "end": None})
         
-        # Find silence_end
+        # Find silence_end (paired with most recent start)
         end_match = re.search(r"silence_end: ([\d.]+)", line)
-        if end_match:
-            silence_ends.append(float(end_match.group(1)))
+        if end_match and silence_regions:
+            silence_regions[-1]["end"] = float(end_match.group(1))
     
-    # Build speech segments (between silence)
-    # First segment: 0 to first silence_start
-    # Middle segments: silence_end to next silence_start
-    # Last segment: last silence_end to end
+    # Filter out incomplete silence regions
+    silence_regions = [r for r in silence_regions if r["end"] is not None]
     
-    if not silence_starts:
+    # Build speech segments (inverse of silence regions)
+    segments = []
+    
+    if not silence_regions:
         # No silence detected - entire audio is speech
-        # Get audio duration
-        duration_cmd = [
-            str(ffmpeg),
-            "-i", str(audio_path),
-            "-f", "null",
-            "-",
-        ]
-        duration_result = subprocess.run(
-            duration_cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        # Parse duration from stderr
-        duration_match = re.search(r"Duration: (\d+):(\d+):(\d+\.\d+)", duration_result.stderr)
-        if duration_match:
-            hours, minutes, seconds = map(float, duration_match.groups())
-            total_seconds = hours * 3600 + minutes * 60 + seconds
-            return [{"start": 0.0, "end": total_seconds}]
-        return []
+        return [{"start": 0.0, "end": total_duration}]
     
-    # Build segments
-    if silence_ends:
-        # First segment: 0 to first silence_start
-        if silence_starts[0] > 0.1:  # Only if there's actual speech before first silence
-            segments.append({"start": 0.0, "end": silence_starts[0]})
-        
-        # Middle segments: between silence_end and next silence_start
-        for i in range(len(silence_ends)):
-            if i < len(silence_starts):
-                segments.append({
-                    "start": silence_ends[i],
-                    "end": silence_starts[i],
-                })
+    # First segment: 0 to first silence_start (if there's speech before first silence)
+    if silence_regions[0]["start"] > 0.1:
+        segments.append({"start": 0.0, "end": silence_regions[0]["start"]})
+    
+    # Middle segments: between silence_end and next silence_start
+    for i in range(len(silence_regions) - 1):
+        seg_start = silence_regions[i]["end"]
+        seg_end = silence_regions[i + 1]["start"]
+        if seg_end > seg_start:  # Only add if valid
+            segments.append({"start": seg_start, "end": seg_end})
+    
+    # Last segment: last silence_end to end (if there's speech after last silence)
+    if silence_regions:
+        last_silence_end = silence_regions[-1]["end"]
+        if last_silence_end < total_duration - 0.1:
+            segments.append({"start": last_silence_end, "end": total_duration})
     
     return segments
 
