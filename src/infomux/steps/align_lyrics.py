@@ -167,10 +167,19 @@ class AlignLyricsStep:
             )
 
             if result.returncode != 0:
-                logger.error("aeneas stderr: %s", result.stderr[-500:])
+                error_msg = result.stderr[-1000:] if result.stderr else ""
+                stdout_msg = result.stdout[-1000:] if result.stdout else ""
+                logger.error("aeneas failed (exit code %d)", result.returncode)
+                if error_msg:
+                    logger.error("aeneas stderr: %s", error_msg)
+                if stdout_msg:
+                    logger.error("aeneas stdout: %s", stdout_msg)
+                combined_error = (error_msg + " " + stdout_msg).strip()
+                if not combined_error:
+                    combined_error = "No error output from aeneas"
                 raise StepError(
                     self.name,
-                    f"aeneas alignment failed with exit code {result.returncode}",
+                    f"aeneas alignment failed: {combined_error[:200]}",
                 )
 
             if not temp_syncmap.exists():
