@@ -1,15 +1,15 @@
 """
-Functional test for lyric-video-isolated pipeline.
+Functional tests for lyric video pipelines.
 
-Tests the full pipeline execution with vocal isolation:
-isolate_vocals → transcribe_timed → extract_audio → generate_lyric_video
-
-Also includes tests for aligned pipelines using official lyrics:
+Tests pipeline execution with vocal isolation and forced alignment:
+- lyric-video-isolated: isolate_vocals → transcribe_timed → extract_audio → generate_lyric_video
 - lyric-video-aligned: extract_audio → align_lyrics → generate_lyric_video
 - lyric-video-aligned-isolated: isolate_vocals → align_lyrics → extract_audio → generate_lyric_video
 
-Test song: "[TEST MASTER 002] - Dogtablet - These Days - 2Bit Through The Wormhole Edit - EAM Mix-05.mp3"
-Lyrics: Official lyrics for "These Days" by Dogtablet
+Note: Full execution tests are skipped by default as they require:
+- Real audio files (recommend using first 60 seconds for faster testing)
+- External tools (ffmpeg, demucs/spleeter, whisper-cli, aeneas)
+- Official lyrics file for aligned pipelines
 """
 
 from __future__ import annotations
@@ -174,8 +174,8 @@ class TestLyricVideoIsolatedPipeline:
 class TestLyricVideoAlignedPipeline:
     """Functional tests for lyric-video-aligned pipelines using official lyrics."""
 
-    # Official lyrics for "These Days" by Dogtablet
-    # Song: "[TEST MASTER 002] - Dogtablet - These Days - 2Bit Through The Wormhole Edit - EAM Mix-05.mp3"
+    # Example official lyrics for testing aligned pipelines
+    # Note: Replace with your own lyrics file for actual testing
     TEST_LYRICS = """When you walk through the door .
 Hearts hit the floor.
 The sky fades to north and south
@@ -274,14 +274,15 @@ Five times by design. I'm still alive."""
         Test aligned pipeline execution with official lyrics file.
         
         This is a functional test that requires:
-        - Real audio file: "[TEST MASTER 002] - Dogtablet - These Days - 2Bit Through The Wormhole Edit - EAM Mix-05.mp3"
-        - Lyrics file with official lyrics
+        - Real audio file (recommend using first 60 seconds: ffmpeg -i input.mp3 -t 60 -c copy sample.mp3)
+        - Lyrics file with official lyrics matching the audio
         - ffmpeg, aeneas, demucs installed
-        - Sufficient time to run (may take several minutes)
+        - Sufficient time to run (may take several minutes for full song)
         
         This test demonstrates using official lyrics for more accurate timing than transcription.
         """
-        # Use the actual file path from the user's example
+        # Example: Use a test audio file (first 60 seconds recommended for faster testing)
+        # audio_file = Path("/path/to/your/test-audio-sample.mp3")
         audio_file = Path(
             "/Users/coj/Library/Mobile Documents/com~apple~CloudDocs/_TRANSFER/"
             "%5BTEST%20MASTER%20002%5D%20-%20Dogtablet%20-%20These%20Days%20-%202Bit%20Through%20The%20Wormhole%20Edit%20-%20EAM%20Mix-05.mp3"
