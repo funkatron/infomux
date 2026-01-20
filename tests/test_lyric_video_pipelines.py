@@ -15,6 +15,7 @@ Note: Full execution tests are skipped by default as they require:
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -76,12 +77,8 @@ class TestLyricVideoVocalsPipeline:
         
         Marked as skip if file doesn't exist to avoid failures in CI.
         """
-        # Example: Use a test audio file (first 60 seconds recommended for faster testing)
-        # For "These Days" by Dogtablet, create a sample: ffmpeg -i full-song.mp3 -t 60 -c copy sample.mp3
-        audio_file = Path(
-            "/Users/coj/Library/Mobile Documents/com~apple~CloudDocs/_TRANSFER/"
-            "test-audio-sample.mp3"  # First 60 seconds of the full song
-        )
+        # Use test fixture audio file (60-second sample)
+        audio_file = Path(__file__).parent / "fixtures" / "test-audio-sample.mp3"
         
         if not audio_file.exists():
             pytest.skip(f"Test audio file not found: {audio_file}")
@@ -307,18 +304,23 @@ Five times by design. I'm still alive."""
         This test demonstrates using official lyrics for more accurate timing than transcription.
         Example: "These Days" by Dogtablet
         """
-        # Use the full song file (or create a sample: ffmpeg -i full-song.mp3 -t 60 -c copy sample.mp3)
-        full_song = Path(
-            "/Users/coj/Library/Mobile Documents/com~apple~CloudDocs/_TRANSFER/"
-            "%5BTEST%20MASTER%20002%5D%20-%20Dogtablet%20-%20These%20Days%20-%202Bit%20Through%20The%20Wormhole%20Edit%20-%20EAM%20Mix-05.mp3"
-        )
-        sample_file = Path(
-            "/Users/coj/Library/Mobile Documents/com~apple~CloudDocs/_TRANSFER/"
-            "test-audio-sample.mp3"  # First 60 seconds (optional, faster for testing)
-        )
+        # Check if aeneas is available
+        import sys
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "aeneas.tools.execute_task", "--help"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pytest.skip("aeneas not installed - required for forced alignment")
         
-        # Prefer sample if it exists, otherwise use full song
-        audio_file = sample_file if sample_file.exists() else full_song
+        if result.returncode != 0:
+            pytest.skip("aeneas not available - required for forced alignment")
+        
+        # Use test fixture audio file (60-second sample)
+        audio_file = Path(__file__).parent / "fixtures" / "test-audio-sample.mp3"
         
         if not audio_file.exists():
             pytest.skip(f"Test audio file not found: {audio_file}")
