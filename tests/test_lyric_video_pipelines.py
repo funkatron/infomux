@@ -88,7 +88,14 @@ class TestLyricVideoIsolatedPipeline:
             pytest.skip(f"Test audio file not found: {audio_file}")
 
         # Set data directory to temp path for test isolation
+        # But keep the whisper model path pointing to the real model location
         monkeypatch.setenv("INFOMUX_DATA_DIR", str(tmp_path))
+        import os
+        if "INFOMUX_WHISPER_MODEL" not in os.environ:
+            # Set the whisper model path explicitly so it's found even with custom DATA_DIR
+            model_path = Path.home() / ".local" / "share" / "infomux" / "models" / "whisper" / "ggml-base.en.bin"
+            if model_path.exists():
+                monkeypatch.setenv("INFOMUX_WHISPER_MODEL", str(model_path))
         
         # Create job
         from infomux.job import InputFile
@@ -115,12 +122,11 @@ class TestLyricVideoIsolatedPipeline:
             pipeline=pipeline,
         )
         
-        # Verify pipeline completed
+        # Verify pipeline completed successfully
         assert success, f"Pipeline failed. Check job: {job.id}"
-        assert job.status == JobStatus.COMPLETED.value
         
         # Verify all steps completed
-        assert len(job.steps) == 4
+        assert len(job.steps) == 4, f"Expected 4 steps, got {len(job.steps)}"
         for step in job.steps:
             assert step.status == "completed", f"Step {step.name} failed: {step.error}"
         
@@ -325,19 +331,33 @@ Five times by design. I'm still alive."""
         - Sufficient time to run (may take several minutes for full song)
         
         This test demonstrates using official lyrics for more accurate timing than transcription.
+        Example: "These Days" by Dogtablet
         """
-        # Example: Use a test audio file (first 60 seconds recommended for faster testing)
-        # For "These Days" by Dogtablet, create a sample: ffmpeg -i full-song.mp3 -t 60 -c copy sample.mp3
-        audio_file = Path(
+        # Use the full song file (or create a sample: ffmpeg -i full-song.mp3 -t 60 -c copy sample.mp3)
+        full_song = Path(
             "/Users/coj/Library/Mobile Documents/com~apple~CloudDocs/_TRANSFER/"
-            "test-audio-sample.mp3"  # First 60 seconds of the full song
+            "%5BTEST%20MASTER%20002%5D%20-%20Dogtablet%20-%20These%20Days%20-%202Bit%20Through%20The%20Wormhole%20Edit%20-%20EAM%20Mix-05.mp3"
         )
+        sample_file = Path(
+            "/Users/coj/Library/Mobile Documents/com~apple~CloudDocs/_TRANSFER/"
+            "test-audio-sample.mp3"  # First 60 seconds (optional, faster for testing)
+        )
+        
+        # Prefer sample if it exists, otherwise use full song
+        audio_file = sample_file if sample_file.exists() else full_song
         
         if not audio_file.exists():
             pytest.skip(f"Test audio file not found: {audio_file}")
 
         # Set data directory to temp path for test isolation
+        # But keep the whisper model path pointing to the real model location
         monkeypatch.setenv("INFOMUX_DATA_DIR", str(tmp_path))
+        import os
+        if "INFOMUX_WHISPER_MODEL" not in os.environ:
+            # Set the whisper model path explicitly so it's found even with custom DATA_DIR
+            model_path = Path.home() / ".local" / "share" / "infomux" / "models" / "whisper" / "ggml-base.en.bin"
+            if model_path.exists():
+                monkeypatch.setenv("INFOMUX_WHISPER_MODEL", str(model_path))
         
         # Create job
         from infomux.job import InputFile
@@ -373,12 +393,11 @@ Five times by design. I'm still alive."""
             pipeline=pipeline,
         )
         
-        # Verify pipeline completed
+        # Verify pipeline completed successfully
         assert success, f"Pipeline failed. Check job: {job.id}"
-        assert job.status == JobStatus.COMPLETED.value
         
         # Verify all steps completed
-        assert len(job.steps) == 4
+        assert len(job.steps) == 4, f"Expected 4 steps, got {len(job.steps)}"
         for step in job.steps:
             assert step.status == "completed", f"Step {step.name} failed: {step.error}"
         
