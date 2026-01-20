@@ -278,30 +278,13 @@ class AlignLyricsStep:
                 self.name, f"failed to parse aeneas syncmap: {e}"
             )
 
-        # Parse lyrics into words (preserve line breaks for better alignment)
-        # Split by whitespace but keep track of line structure
-        lines = [line.strip() for line in lyrics_text.split("\n") if line.strip()]
-        all_words = []
-        for line in lines:
-            words_in_line = line.split()
-            all_words.extend(words_in_line)
-        
         # Extract fragments from syncmap
         fragments = syncmap_data.get("fragments", [])
         
-        if len(fragments) != len(all_words):
-            logger.warning(
-                "syncmap has %d fragments but lyrics has %d words - alignment may be incomplete",
-                len(fragments),
-                len(all_words),
-            )
-            # Use minimum to avoid index errors
-            num_words = min(len(fragments), len(all_words))
-        else:
-            num_words = len(all_words)
-
+        # Check if fragments have children (multilevel/word-level alignment)
+        has_children = any(frag.get("children") for frag in fragments)
+        
         # Build transcript.json structure
-        # Format matches what transcribe_timed produces
         transcription = []
         current_segment = {
             "id": 0,
@@ -311,11 +294,45 @@ class AlignLyricsStep:
             "tokens": [],
         }
 
-        for i, fragment in enumerate(fragments):
-            if i >= num_words:
-                break
-                
-            word_text = all_words[i]
+        def format_timestamp(ms: int) -> str:
+            """Format milliseconds as HH:MM:SS,mmm"""
+            total_seconds = ms // 1000
+            milliseconds = ms % 1000
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            seconds = total_seconds % 60
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
+
+        if has_children:
+            # Multilevel alignment: extract word-level fragments from children
+            word_fragments = []
+            for frag in fragments:
+                children = frag.get("children", [])
+                for child in children:
+                    grand_children = child.get("children", [])
+                    if grand_children:
+                        # Three levels: paragraph -> sentence -> word
+                        word_fragments.extend(grand_children)
+                    else:
+                        # Two levels: sentence -> word
+                        word_fragments.append(child)
+            
+            # Use word fragments directly
+            fragments = word_fragments
+            logger.debug("using multilevel alignment: %d word fragments", len(fragments))
+
+        # Process fragments - each fragment may contain one or more words
+        for fragment in fragments:
+            # Get text from fragment (from 'lines' field)
+            fragment_lines = fragment.get("lines", [])
+            fragment_text = " ".join(fragment_lines).strip()
+            
+            if not fragment_text:
+                continue
+            
+            # Split fragment text into words
+            words_in_fragment = fragment_text.split()
+            
             begin_time = fragment.get("begin", "0.000")
             end_time = fragment.get("end", "0.000")
             
@@ -324,30 +341,47 @@ class AlignLyricsStep:
                 begin_ms = int(float(begin_time) * 1000)
                 end_ms = int(float(end_time) * 1000)
             except (ValueError, TypeError):
-                logger.warning("invalid timing for word %d: begin=%s, end=%s", i, begin_time, end_time)
+                logger.warning("invalid timing: begin=%s, end=%s", begin_time, end_time)
                 continue
-
-            # Format timestamps as HH:MM:SS,mmm
-            def format_timestamp(ms: int) -> str:
-                total_seconds = ms // 1000
-                milliseconds = ms % 1000
-                hours = total_seconds // 3600
-                minutes = (total_seconds % 3600) // 60
-                seconds = total_seconds % 60
-                return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
-
-            # Create token entry
-            token = {
-                "text": f" {word_text}",  # Leading space indicates word boundary
-                "timestamps": {
-                    "from": format_timestamp(begin_ms),
-                    "to": format_timestamp(end_ms),
-                },
-            }
-
-            current_segment["tokens"].append(token)
-            current_segment["text"] += word_text + " "
-
+            
+            # If fragment has multiple words, split timing proportionally
+            if len(words_in_fragment) > 1:
+                duration_ms = end_ms - begin_ms
+                time_per_word = duration_ms / len(words_in_fragment)
+                
+                for i, word_text in enumerate(words_in_fragment):
+                    word_begin_ms = begin_ms + int(i * time_per_word)
+                    word_end_ms = begin_ms + int((i + 1) * time_per_word)
+                    
+                    # Last word gets the exact end time
+                    if i == len(words_in_fragment) - 1:
+                        word_end_ms = end_ms
+                    
+                    token = {
+                        "text": f" {word_text}" if i > 0 else word_text,  # Leading space for word boundaries
+                        "timestamps": {
+                            "from": format_timestamp(word_begin_ms),
+                            "to": format_timestamp(word_end_ms),
+                        },
+                    }
+                    
+                    current_segment["tokens"].append(token)
+                    current_segment["text"] += word_text + " "
+            else:
+                # Single word fragment
+                word_text = words_in_fragment[0] if words_in_fragment else fragment_text
+                
+                token = {
+                    "text": f" {word_text}",  # Leading space indicates word boundary
+                    "timestamps": {
+                        "from": format_timestamp(begin_ms),
+                        "to": format_timestamp(end_ms),
+                    },
+                }
+                
+                current_segment["tokens"].append(token)
+                current_segment["text"] += word_text + " "
+            
             # Update segment end time
             current_segment["end"] = format_timestamp(end_ms)
 
@@ -364,7 +398,8 @@ class AlignLyricsStep:
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(transcript_data, f, indent=2, ensure_ascii=False)
 
-        logger.debug("converted syncmap to transcript.json format: %d segments", len(transcription))
+        total_words = sum(len(seg.get("tokens", [])) for seg in transcription)
+        logger.debug("converted syncmap to transcript.json: %d segments, %d words", len(transcription), total_words)
 
 
 def run(
