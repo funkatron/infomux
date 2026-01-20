@@ -37,11 +37,13 @@ class InputFile:
         path: Absolute path to the input file.
         sha256: SHA-256 hash of the file contents for verification.
         size_bytes: File size in bytes.
+        original_url: Original URL if the file was downloaded from a URL (None otherwise).
     """
 
     path: str
     sha256: str
     size_bytes: int
+    original_url: str | None = None
 
     @classmethod
     def from_path(cls, path: Path) -> InputFile:

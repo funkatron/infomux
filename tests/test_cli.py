@@ -28,7 +28,7 @@ class TestParser:
         args = parser.parse_args(["run", str(test_file)])
 
         assert args.command == "run"
-        assert args.input == test_file
+        assert args.input == str(test_file)
 
     def test_run_with_steps(self, tmp_path) -> None:
         """run command accepts --steps."""

@@ -14,17 +14,84 @@ Usage:
 from __future__ import annotations
 
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from argparse import ArgumentParser, Namespace
+from datetime import UTC, datetime
 from pathlib import Path
 
 from infomux.config import get_tool_paths
-from infomux.job import InputFile, JobEnvelope, JobStatus
+from infomux.job import InputFile, JobEnvelope, JobStatus, generate_run_id
 from infomux.log import get_logger
 from infomux.pipeline import run_pipeline
 from infomux.pipeline_def import get_pipeline, list_pipelines
 from infomux.storage import get_run_dir, save_job
 
 logger = get_logger(__name__)
+
+
+def is_url(input_str: str) -> bool:
+    """
+    Check if the input string is a URL.
+
+    Args:
+        input_str: Input string to check.
+
+    Returns:
+        True if the input appears to be a URL, False otherwise.
+    """
+    parsed = urllib.parse.urlparse(input_str)
+    return parsed.scheme in ("http", "https")
+
+
+def download_url(url: str, output_path: Path) -> Path:
+    """
+    Download a file from a URL to a local path.
+
+    Args:
+        url: URL to download from.
+        output_path: Local path to save the downloaded file.
+
+    Returns:
+        Path to the downloaded file.
+
+    Raises:
+        urllib.error.URLError: If the download fails.
+        OSError: If the file cannot be written.
+    """
+    logger.info("downloading from URL: %s", url)
+    try:
+        with urllib.request.urlopen(url) as response:
+            # Get content length if available
+            content_length = response.headers.get("Content-Length")
+            if content_length:
+                size_mb = int(content_length) / (1024 * 1024)
+                logger.info("file size: %.1f MB", size_mb)
+
+            # Ensure output directory exists
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Download in chunks
+            with open(output_path, "wb") as f:
+                chunk_size = 8192
+                downloaded = 0
+                while True:
+                    chunk = response.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if content_length:
+                        percent = (downloaded / int(content_length)) * 100
+                        logger.debug("downloaded: %.1f%%", percent)
+
+        logger.info("downloaded to: %s", output_path)
+        return output_path
+    except urllib.error.HTTPError as e:
+        raise urllib.error.URLError(f"HTTP error {e.code}: {e.reason}") from e
+    except urllib.error.URLError as e:
+        raise urllib.error.URLError(f"Failed to download URL: {e.reason}") from e
 
 
 def configure_parser(parser: ArgumentParser) -> None:
@@ -36,9 +103,9 @@ def configure_parser(parser: ArgumentParser) -> None:
     """
     parser.add_argument(
         "input",
-        type=Path,
+        type=str,
         nargs="?",  # Optional when using --check-deps or --list-pipelines
-        help="Path to the input media file",
+        help="Path to the input media file or URL (http:// or https://)",
     )
     parser.add_argument(
         "--pipeline",
@@ -131,18 +198,65 @@ def execute(args: Namespace) -> int:
         logger.error("input file is required")
         return 1
 
-    input_path: Path = args.input
+    input_str: str = args.input
+    original_url: str | None = None
+    input_path: Path
+    run_id: str | None = None
 
-    # Validate input file
-    if not input_path.exists():
-        logger.error("input file not found: %s", input_path)
-        return 1
+    # Handle URL input
+    if is_url(input_str):
+        original_url = input_str
+        logger.info("input is a URL: %s", original_url)
 
-    if not input_path.is_file():
-        logger.error("input path is not a file: %s", input_path)
-        return 1
+        # Generate run_id early so we can download to the run directory
+        run_id = generate_run_id()
+        run_dir = get_run_dir(run_id)
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        # Determine filename from URL or use a default
+        parsed_url = urllib.parse.urlparse(original_url)
+        url_filename = Path(parsed_url.path).name
+        if not url_filename or url_filename == "/":
+            # No filename in URL, use a default based on content type
+            url_filename = "input_media"
+
+        # Download to run directory
+        downloaded_path = run_dir / url_filename
+        try:
+            download_url(original_url, downloaded_path)
+            input_path = downloaded_path
+        except urllib.error.URLError as e:
+            logger.error("failed to download URL: %s", e)
+            return 1
+        except Exception as e:
+            logger.error("unexpected error downloading URL: %s", e)
+            return 1
+    else:
+        # Handle local file path
+        input_path = Path(input_str)
+
+        # Validate input file
+        if not input_path.exists():
+            logger.error("input file not found: %s", input_path)
+            return 1
+
+        if not input_path.is_file():
+            logger.error("input path is not a file: %s", input_path)
+            return 1
 
     logger.info("processing input: %s", input_path)
+
+    # Detect if input is HTML/text content and suggest web-summarize pipeline
+    from infomux.steps.extract_text import is_html_file
+
+    is_html = is_html_file(input_path)
+    if is_html and args.pipeline is None:
+        # Auto-detect HTML content and use web-summarize pipeline
+        logger.info(
+            "detected HTML/text content, using 'web-summarize' pipeline "
+            "(use --pipeline to override)"
+        )
+        args.pipeline = "web-summarize"
 
     # Get pipeline definition
     try:
@@ -163,14 +277,29 @@ def execute(args: Namespace) -> int:
     # Create input file metadata
     try:
         input_file = InputFile.from_path(input_path)
+        if original_url:
+            input_file.original_url = original_url
         logger.debug("input sha256: %s", input_file.sha256)
         logger.debug("input size: %d bytes", input_file.size_bytes)
+        if original_url:
+            logger.debug("original URL: %s", original_url)
     except Exception as e:
         logger.error("failed to read input file: %s", e)
         return 1
 
     # Create job envelope
-    job = JobEnvelope.create(input_file=input_file)
+    # If we already created a run_id for URL download, reuse it
+    if run_id is not None:
+        now = datetime.now(UTC).isoformat()
+        job = JobEnvelope(
+            id=run_id,
+            created_at=now,
+            updated_at=now,
+            status=JobStatus.PENDING.value,
+            input=input_file,
+        )
+    else:
+        job = JobEnvelope.create(input_file=input_file)
 
     # Parse steps if specified (subset of pipeline)
     step_names = None
@@ -212,7 +341,10 @@ def execute(args: Namespace) -> int:
     # Save the job envelope
     job.update_status(JobStatus.RUNNING)
     save_job(job)
+    # Get run_dir (may already exist if we downloaded a URL)
     run_dir = get_run_dir(job.id)
+    if not run_dir.exists():
+        run_dir.mkdir(parents=True, exist_ok=True)
     logger.info("created run: %s", job.id)
     logger.debug("run directory: %s", run_dir)
 
@@ -322,6 +454,37 @@ def _check_dependencies() -> int:
         print("    mkdir -p ~/.local/share/infomux/models/whisper")
         print("    curl -L -o ~/.local/share/infomux/models/whisper/ggml-base.en.bin")
         print("      https://huggingface.co/.../ggml-base.en.bin")
+
+    # OCR engines (for image text extraction)
+    if tools.tesseract:
+        print(f"✓ tesseract: {tools.tesseract} (default OCR engine)")
+    else:
+        print("✗ tesseract: NOT FOUND (required for OCR)")
+        print("  Install: brew install tesseract")
+
+    # EasyOCR (optional, better quality with GPU support)
+    easyocr_available = False
+    try:
+        import easyocr
+        import torch
+        # Check for GPU acceleration
+        has_mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+        has_cuda = torch.cuda.is_available()
+        gpu_status = ""
+        if has_mps:
+            gpu_status = " (Metal/Apple Silicon GPU)"
+        elif has_cuda:
+            gpu_status = " (CUDA GPU)"
+        else:
+            gpu_status = " (CPU only)"
+        
+        easyocr_available = True
+        print(f"✓ EasyOCR: available{gpu_status} (optional, better quality)")
+    except ImportError:
+        print("○ EasyOCR: NOT FOUND (optional, for better OCR quality)")
+        print("  Install: pip install easyocr")
+        print("  For Apple Silicon GPU: pip install torch torchvision (Metal support)")
+
 
     print()
 
