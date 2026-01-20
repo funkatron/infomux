@@ -213,7 +213,7 @@ def configure_parser(parser: ArgumentParser) -> None:
         help="Path to official lyrics text file for forced alignment. "
         "When provided, uses align_lyrics step instead of transcribe_timed. "
         "If not provided, looks for lyrics.txt in the run directory. "
-        "Requires lyric-video-aligned or lyric-video-aligned-isolated pipeline.",
+        "Requires lyric-video-aligned or lyric-video-aligned-vocals pipeline.",
     )
     parser.add_argument(
         "--lyric-font-color",

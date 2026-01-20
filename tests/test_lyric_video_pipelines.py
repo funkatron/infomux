@@ -2,9 +2,9 @@
 Functional tests for lyric video pipelines.
 
 Tests pipeline execution with vocal isolation and forced alignment:
-- lyric-video-isolated: isolate_vocals → transcribe_timed → extract_audio → generate_lyric_video
+- lyric-video-vocals: isolate_vocals → transcribe_timed → extract_audio → generate_lyric_video
 - lyric-video-aligned: extract_audio → align_lyrics → generate_lyric_video
-- lyric-video-aligned-isolated: isolate_vocals → align_lyrics → extract_audio → generate_lyric_video
+- lyric-video-aligned-vocals: isolate_vocals → align_lyrics → extract_audio → generate_lyric_video
 
 Test example: "These Days" by Dogtablet
 Note: Full execution tests are skipped by default as they require:
@@ -26,18 +26,18 @@ from infomux.pipeline import run_pipeline
 from infomux.pipeline_def import get_pipeline
 
 
-class TestLyricVideoIsolatedPipeline:
-    """Functional tests for lyric-video-isolated pipeline."""
+class TestLyricVideoVocalsPipeline:
+    """Functional tests for lyric-video-vocals pipeline."""
 
     def test_pipeline_exists(self) -> None:
         """Pipeline is registered and accessible."""
-        pipeline = get_pipeline("lyric-video-isolated")
-        assert pipeline.name == "lyric-video-isolated"
+        pipeline = get_pipeline("lyric-video-vocals")
+        assert pipeline.name == "lyric-video-vocals"
         assert len(pipeline.steps) == 4
 
     def test_pipeline_steps_order(self) -> None:
         """Pipeline steps are in correct order."""
-        pipeline = get_pipeline("lyric-video-isolated")
+        pipeline = get_pipeline("lyric-video-vocals")
         step_names = pipeline.step_names()
         assert step_names == [
             "isolate_vocals",
@@ -48,7 +48,7 @@ class TestLyricVideoIsolatedPipeline:
 
     def test_pipeline_step_dependencies(self) -> None:
         """Pipeline steps have correct input dependencies."""
-        pipeline = get_pipeline("lyric-video-isolated")
+        pipeline = get_pipeline("lyric-video-vocals")
 
         isolate_vocals = pipeline.get_step("isolate_vocals")
         assert isolate_vocals is not None
@@ -103,7 +103,7 @@ class TestLyricVideoIsolatedPipeline:
         job = JobEnvelope.create(input_file=input_file)
         
         # Get pipeline
-        pipeline = get_pipeline("lyric-video-isolated")
+        pipeline = get_pipeline("lyric-video-vocals")
         
         # Create run directory
         run_dir = tmp_path / "runs" / job.id
@@ -159,7 +159,7 @@ class TestLyricVideoIsolatedPipeline:
 
     def test_pipeline_config_values(self) -> None:
         """Pipeline step configs have correct values."""
-        pipeline = get_pipeline("lyric-video-isolated")
+        pipeline = get_pipeline("lyric-video-vocals")
         
         isolate_vocals = pipeline.get_step("isolate_vocals")
         assert isolate_vocals is not None
@@ -208,8 +208,8 @@ Five times by design. I'm still alive."""
 
     def test_aligned_isolated_pipeline_exists(self) -> None:
         """Aligned isolated pipeline is registered and accessible."""
-        pipeline = get_pipeline("lyric-video-aligned-isolated")
-        assert pipeline.name == "lyric-video-aligned-isolated"
+        pipeline = get_pipeline("lyric-video-aligned-vocals")
+        assert pipeline.name == "lyric-video-aligned-vocals"
         assert len(pipeline.steps) == 4
 
     def test_aligned_pipeline_steps_order(self) -> None:
@@ -224,7 +224,7 @@ Five times by design. I'm still alive."""
 
     def test_aligned_isolated_pipeline_steps_order(self) -> None:
         """Aligned isolated pipeline steps are in correct order."""
-        pipeline = get_pipeline("lyric-video-aligned-isolated")
+        pipeline = get_pipeline("lyric-video-aligned-vocals")
         step_names = pipeline.step_names()
         assert step_names == [
             "isolate_vocals",
@@ -251,7 +251,7 @@ Five times by design. I'm still alive."""
 
     def test_aligned_isolated_pipeline_step_dependencies(self) -> None:
         """Aligned isolated pipeline steps have correct input dependencies."""
-        pipeline = get_pipeline("lyric-video-aligned-isolated")
+        pipeline = get_pipeline("lyric-video-aligned-vocals")
 
         isolate_vocals = pipeline.get_step("isolate_vocals")
         assert isolate_vocals is not None
@@ -365,7 +365,7 @@ Five times by design. I'm still alive."""
         job = JobEnvelope.create(input_file=input_file)
         
         # Get pipeline
-        pipeline = get_pipeline("lyric-video-aligned-isolated")
+        pipeline = get_pipeline("lyric-video-aligned-vocals")
         
         # Create run directory
         run_dir = tmp_path / "runs" / job.id

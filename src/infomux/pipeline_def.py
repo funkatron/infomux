@@ -316,8 +316,8 @@ LYRIC_VIDEO_PIPELINE = PipelineDef(
 
 # Lyric video pipeline with vocal isolation: isolate vocals directly from input for better quality
 LYRIC_VIDEO_ISOLATED_PIPELINE = PipelineDef(
-    name="lyric-video-isolated",
-    description="Generate music lyric video with vocal isolation for improved timing",
+    name="lyric-video-vocals",
+    description="Generate lyric video with vocal isolation for improved transcription timing",
     steps=[
         StepDef(
             name="isolate_vocals",
@@ -351,7 +351,7 @@ LYRIC_VIDEO_ISOLATED_PIPELINE = PipelineDef(
 # Lyric video pipeline with official lyrics alignment: use forced alignment for precise timing
 LYRIC_VIDEO_ALIGNED_PIPELINE = PipelineDef(
     name="lyric-video-aligned",
-    description="Generate lyric video using official lyrics with forced alignment for precise timing",
+    description="Generate lyric video using official lyrics with forced alignment (requires --lyrics-file)",
     steps=[
         StepDef(
             name="extract_audio",
@@ -379,8 +379,8 @@ LYRIC_VIDEO_ALIGNED_PIPELINE = PipelineDef(
 
 # Lyric video pipeline with vocal isolation + official lyrics alignment
 LYRIC_VIDEO_ALIGNED_ISOLATED_PIPELINE = PipelineDef(
-    name="lyric-video-aligned-isolated",
-    description="Generate lyric video with vocal isolation and official lyrics alignment",
+    name="lyric-video-aligned-vocals",
+    description="Generate lyric video with vocal isolation and forced alignment (requires --lyrics-file)",
     steps=[
         StepDef(
             name="isolate_vocals",
@@ -423,9 +423,9 @@ PIPELINES: dict[str, PipelineDef] = {
     "audio-to-video": AUDIO_TO_VIDEO_PIPELINE,
     "web-summarize": WEB_SUMMARIZE_PIPELINE,
     "lyric-video": LYRIC_VIDEO_PIPELINE,
-    "lyric-video-isolated": LYRIC_VIDEO_ISOLATED_PIPELINE,
+    "lyric-video-vocals": LYRIC_VIDEO_ISOLATED_PIPELINE,
     "lyric-video-aligned": LYRIC_VIDEO_ALIGNED_PIPELINE,
-    "lyric-video-aligned-isolated": LYRIC_VIDEO_ALIGNED_ISOLATED_PIPELINE,
+    "lyric-video-aligned-vocals": LYRIC_VIDEO_ALIGNED_ISOLATED_PIPELINE,
     # Future pipelines (see docs/FUTURE_PLANS.md):
     # "image-summarize": Extract text from images (OCR) ? summarize
     # "document-summarize": Extract text from documents (PDF/DOCX/images) ? summarize
