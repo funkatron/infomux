@@ -267,6 +267,57 @@ Five times by design. I'm still alive."""
         assert generate_lyric_video is not None
         assert generate_lyric_video.input_from == "extract_audio"  # Uses extracted audio (with music)
 
+    def test_lyrics_file_reading(self, tmp_path: Path) -> None:
+        """Test that lyrics file can be read and used by align_lyrics step."""
+        from infomux.steps.align_lyrics import AlignLyricsStep
+        from infomux.steps import StepError
+
+        # Create a test lyrics file
+        lyrics_file = tmp_path / "lyrics.txt"
+        lyrics_file.write_text(self.TEST_LYRICS, encoding="utf-8")
+
+        # Create a dummy audio file
+        audio_file = tmp_path / "audio.wav"
+        audio_file.write_bytes(b"fake audio")
+
+        # Test that step can find and read lyrics file when provided
+        step = AlignLyricsStep(lyrics_file=str(lyrics_file))
+        
+        # The step should be able to find the lyrics file
+        # We can't fully execute without aeneas, but we can test the file reading logic
+        # by checking that it raises an appropriate error when aeneas is not available
+        # (rather than a "file not found" error)
+        try:
+            step.execute(audio_file, tmp_path)
+        except StepError as e:
+            # Should fail on aeneas not found, not on lyrics file not found
+            assert "lyrics file not found" not in str(e).lower(), \
+                f"Should have found lyrics file, but got: {e}"
+            # It's OK if it fails on aeneas - that means it found the lyrics file
+
+        # Test that step can find lyrics.txt in output_dir automatically
+        step2 = AlignLyricsStep(lyrics_file=None)  # No explicit file
+        try:
+            step2.execute(audio_file, tmp_path)
+        except StepError as e:
+            # Should fail on aeneas not found, not on lyrics file not found
+            assert "lyrics file not found" not in str(e).lower(), \
+                f"Should have auto-found lyrics.txt, but got: {e}"
+
+        # Test that step raises error when lyrics file doesn't exist
+        step3 = AlignLyricsStep(lyrics_file="nonexistent.txt")
+        with pytest.raises(StepError) as exc_info:
+            step3.execute(audio_file, tmp_path)
+        assert "lyrics file not found" in str(exc_info.value).lower()
+
+        # Test that step raises error when lyrics file is empty
+        empty_lyrics = tmp_path / "empty_lyrics.txt"
+        empty_lyrics.write_text("", encoding="utf-8")
+        step4 = AlignLyricsStep(lyrics_file=str(empty_lyrics))
+        with pytest.raises(StepError) as exc_info:
+            step4.execute(audio_file, tmp_path)
+        assert "empty" in str(exc_info.value).lower()
+
     @pytest.mark.skip(
         reason="Requires real audio file, lyrics file, and external tools (ffmpeg, aeneas, demucs). "
         "Run manually with: infomux run --pipeline lyric-video-aligned-isolated --lyrics-file lyrics.txt <audio-file>"
