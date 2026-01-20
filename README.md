@@ -235,6 +235,12 @@ infomux inspect --list-steps
 # View a specific run (tab-complete the run ID)
 infomux inspect run-20260111-020549-c36c19
 
+# Show the path to a run directory
+infomux inspect --path run-20260111-020549-c36c19
+
+# Open the run directory in Finder (macOS) or file manager
+infomux inspect --open run-20260111-020549-c36c19
+
 # Get JSON for scripting/automation
 infomux inspect --json run-20260111-020549-c36c19
 

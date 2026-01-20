@@ -10,17 +10,21 @@ Usage:
     infomux inspect --list
     infomux inspect --list-pipelines
     infomux inspect --list-steps
+    infomux inspect --path <run-id>
+    infomux inspect --open <run-id>
 """
 
 from __future__ import annotations
 
+import platform
+import subprocess
 import sys
 from argparse import ArgumentParser, Namespace
 
 from infomux.log import get_logger
 from infomux.pipeline_def import get_pipeline, list_pipelines
 from infomux.steps import get_step, list_steps
-from infomux.storage import list_runs, load_job, run_exists
+from infomux.storage import get_run_dir, list_runs, load_job, run_exists
 
 logger = get_logger(__name__)
 
@@ -61,6 +65,16 @@ def configure_parser(parser: ArgumentParser) -> None:
         action="store_true",
         help="List available steps and exit",
     )
+    parser.add_argument(
+        "--open",
+        action="store_true",
+        help="Open the run directory in Finder (macOS) or file manager",
+    )
+    parser.add_argument(
+        "--path",
+        action="store_true",
+        help="Show the path to the run directory",
+    )
 
 
 def execute(args: Namespace) -> int:
@@ -96,6 +110,16 @@ def execute(args: Namespace) -> int:
     if not run_exists(run_id):
         logger.error("run not found: %s", run_id)
         return 1
+
+    # Get run directory path
+    run_dir = get_run_dir(run_id)
+
+    # Handle --path or --open flags
+    if args.path or args.open:
+        print(str(run_dir), file=sys.stdout)
+        if args.open:
+            _open_directory(run_dir)
+        return 0
 
     # Load the job envelope
     try:
@@ -310,6 +334,36 @@ def _list_steps() -> int:
     print()
     print(f"Total: {len(steps)} step(s)")
     return 0
+
+
+def _open_directory(path: Path) -> None:
+    """
+    Open a directory in the system file manager.
+
+    Args:
+        path: Path to the directory to open.
+    """
+    system = platform.system()
+    try:
+        if system == "Darwin":  # macOS
+            subprocess.run(["open", str(path)], check=True)
+        elif system == "Windows":
+            subprocess.run(["explorer", str(path)], check=True)
+        elif system == "Linux":
+            # Try common Linux file managers
+            for cmd in ["xdg-open", "nautilus", "dolphin", "thunar"]:
+                try:
+                    subprocess.run([cmd, str(path)], check=True)
+                    return
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    continue
+            logger.warning("could not find a file manager to open directory")
+        else:
+            logger.warning("unsupported platform: %s", system)
+    except subprocess.CalledProcessError as e:
+        logger.error("failed to open directory: %s", e)
+    except FileNotFoundError:
+        logger.error("file manager command not found")
 
 
 def _print_job_summary(job) -> None:
