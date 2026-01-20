@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 ENV_WHISPER_MODEL = "INFOMUX_WHISPER_MODEL"
 ENV_FFMPEG_PATH = "INFOMUX_FFMPEG_PATH"
 ENV_WHISPER_CLI_PATH = "INFOMUX_WHISPER_CLI_PATH"
+ENV_TESSERACT_PATH = "INFOMUX_TESSERACT_PATH"
 
 
 @dataclass
@@ -31,11 +32,13 @@ class ToolPaths:
         ffmpeg: Path to ffmpeg binary.
         whisper_cli: Path to whisper-cli binary.
         whisper_model: Path to whisper model file.
+        tesseract: Path to tesseract binary (for OCR).
     """
 
     ffmpeg: Path | None
     whisper_cli: Path | None
     whisper_model: Path | None
+    tesseract: Path | None
 
     def validate(self) -> list[str]:
         """
@@ -152,4 +155,5 @@ def get_tool_paths() -> ToolPaths:
         ffmpeg=find_tool("ffmpeg", ENV_FFMPEG_PATH),
         whisper_cli=find_tool("whisper-cli", ENV_WHISPER_CLI_PATH),
         whisper_model=get_whisper_model_path(),
+        tesseract=find_tool("tesseract", ENV_TESSERACT_PATH),
     )

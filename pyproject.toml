@@ -30,6 +30,12 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.1",
 ]
+ocr = [
+    "easyocr>=1.7.0",  # Deep learning OCR (better quality, optional)
+    # Note: For Apple Silicon, install PyTorch with Metal support:
+    # pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+    # Or use the Metal-accelerated version for better performance
+]
 
 [project.scripts]
 infomux = "infomux.cli:main"
