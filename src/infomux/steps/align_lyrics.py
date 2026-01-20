@@ -108,6 +108,12 @@ class AlignLyricsStep:
                 raise StepError(self.name, "lyrics file is empty")
         except Exception as e:
             raise StepError(self.name, f"failed to read lyrics file: {e}")
+        
+        # Convert lyrics to MPLAIN format for better word-level alignment
+        # MPLAIN: paragraphs separated by blank lines, sentences on separate lines
+        # For lyrics, treat each line as a sentence, group stanzas as paragraphs
+        lines = [line.strip() for line in lyrics_text.split("\n") if line.strip()]
+        mplain_text = "\n".join(lines)  # Each line is a sentence, blank lines separate paragraphs
 
         # Convert audio to a format aeneas can read (44.1kHz mono 16-bit PCM)
         # aeneas prefers higher sample rates and may have issues with 16kHz
@@ -176,21 +182,28 @@ class AlignLyricsStep:
         else:
             tts_engine = "espeak"  # Default to espeak on Linux
         
+        # Use MPLAIN (multilevel plain) format for better word-level alignment
+        # MPLAIN: paragraphs separated by blank lines, sentences on separate lines
+        # This gives us multilevel fragments (paragraph -> sentence -> word)
         config_string = (
             f"task_language={self.language}|"
-            "is_text_type=plain|"
+            "is_text_type=mplain|"  # Multilevel plain text for word-level alignment
             "os_task_file_format=json|"
             f"tts={tts_engine}|"
             "mfcc_mask_nonspeech=True|"
             "mfcc_mask_nonspeech_l3=True"
         )
 
+        # Write MPLAIN formatted text to temporary file
+        temp_lyrics = output_dir / "lyrics_mplain.txt"
+        temp_lyrics.write_text(mplain_text, encoding="utf-8")
+        
         cmd = [
             python_exe,  # Use the same Python executable
             "-m",
             "aeneas.tools.execute_task",
             str(audio_for_alignment),  # Use converted audio
-            str(lyrics_path),
+            str(temp_lyrics),  # Use MPLAIN formatted lyrics
             config_string,
             str(temp_syncmap),
             "--presets-word",  # Word-level alignment
@@ -244,6 +257,8 @@ class AlignLyricsStep:
                 temp_syncmap.unlink()
             if temp_audio.exists():
                 temp_audio.unlink()
+            if temp_lyrics.exists():
+                temp_lyrics.unlink()
 
             if not output_path.exists():
                 raise StepError(self.name, f"output file not created: {output_path}")
