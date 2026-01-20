@@ -22,7 +22,9 @@ classifiers = [
 ]
 
 # Minimal dependencies - stdlib only for core functionality
-dependencies = []
+dependencies = [
+    "ftfy>=6.0.0", # Fix Unicode encoding issues (mojibake, replacement characters)
+]
 
 [project.optional-dependencies]
 dev = [

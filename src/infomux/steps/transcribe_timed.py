@@ -19,8 +19,11 @@ import json
 import re
 import subprocess
 import time
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
+
+import ftfy
 
 from infomux.config import get_tool_paths
 from infomux.log import get_logger
@@ -107,6 +110,11 @@ def _is_word_boundary(text: str) -> tuple[bool, str]:
     if not clean_text:
         return (True, "")
 
+    # Skip Unicode replacement characters and other problematic characters
+    if clean_text == "\ufffd" or (len(clean_text) == 1 and unicodedata.category(clean_text) == "So"):
+        # Unicode replacement character or other symbols that might be encoding artifacts
+        return (True, "")
+
     # Punctuation-only tokens are boundaries
     if clean_text in [",", ".", "!", "?", ";", ":", "-"]:
         return (True, clean_text)
@@ -166,6 +174,10 @@ def _generate_word_level_srt(json_path: Path, output_path: Path) -> None:
 
         for token in tokens:
             raw_text = token.get("text", "")
+            # Fix Unicode encoding issues (mojibake, replacement characters)
+            raw_text = ftfy.fix_text(raw_text, normalization="NFC")
+            # Remove Unicode replacement characters that couldn't be fixed
+            raw_text = raw_text.replace("\ufffd", "")
             is_boundary, clean_text = _is_word_boundary(raw_text)
 
             # Skip empty or special tokens
@@ -308,6 +320,10 @@ def _generate_word_level_vtt(json_path: Path, output_path: Path) -> None:
 
         for token in tokens:
             raw_text = token.get("text", "")
+            # Fix Unicode encoding issues (mojibake, replacement characters)
+            raw_text = ftfy.fix_text(raw_text, normalization="NFC")
+            # Remove Unicode replacement characters that couldn't be fixed
+            raw_text = raw_text.replace("\ufffd", "")
             is_boundary, clean_text = _is_word_boundary(raw_text)
 
             # Skip empty or special tokens

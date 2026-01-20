@@ -244,12 +244,20 @@ def _list_runs(output_json: bool = False) -> int:
                             process_id = step.process_id
                             break
                 
-                # Input file name
+                # Input file name and type
                 input_name = "?"
+                input_type = "?"
                 if job.input:
                     from pathlib import Path
+                    from urllib.parse import unquote
                     input_path = Path(job.input.path)
-                    input_name = input_path.name
+                    # Decode URL-encoded filenames for better display
+                    input_name = unquote(input_path.name)
+                    # Extract file extension/type
+                    if input_path.suffix:
+                        input_type = input_path.suffix[1:].upper()  # Remove dot, uppercase
+                    else:
+                        input_type = "?"
                     if job.input.original_url:
                         # Show URL for downloaded files
                         from urllib.parse import urlparse
@@ -270,6 +278,7 @@ def _list_runs(output_json: bool = False) -> int:
                     "current_step": current_step,
                     "process_id": process_id,
                     "input": input_name,
+                    "input_type": input_type,
                     "artifacts": artifact_count,
                 })
             except Exception as e:
@@ -282,16 +291,20 @@ def _list_runs(output_json: bool = False) -> int:
                     "date": "?",
                     "pipeline": "?",
                     "input": "?",
+                    "input_type": "?",
                     "artifacts": 0,
                 })
         
         # Print table
         if rows:
+            # Limit input column width for space efficiency
+            MAX_INPUT_WIDTH = 40
+            
             # Calculate column widths
             max_id_len = max(len(r["id"]) for r in rows)
             max_status_len = max(len(r["status"]) for r in rows)
             max_pipeline_len = max(len(r["pipeline"]) for r in rows)
-            max_input_len = max(len(r["input"]) for r in rows)
+            max_input_len = min(max(len(r["input"]) for r in rows), MAX_INPUT_WIDTH)
             max_step_len = max(len(r["current_step"] or "") for r in rows)
             
             # Ensure minimum widths for headers
@@ -301,19 +314,28 @@ def _list_runs(output_json: bool = False) -> int:
             max_input_len = max(max_input_len, len("Input"))
             max_step_len = max(max_step_len, len("Step"))
             
+            # Check if we have running jobs (to conditionally show Step/PID columns)
+            has_running = any(r["status"] == "running" for r in rows)
+            
             # Build header - include times and step/PID for running jobs
             header_parts = [
                 f"{'':2}",
                 f"{'Run ID':<{max_id_len}}",
                 f"{'Status':<{max_status_len}}",
                 f"{'Date':<10}",
-                f"{'Start':<8}",
-                f"{'Stop':<8}",
-                f"{'Pipeline':<{max_pipeline_len}}",
             ]
             
+            # Only show Start/Stop times if we have completed/failed jobs
+            has_finished = any(r["status"] in ("completed", "failed", "interrupted") for r in rows)
+            if has_finished:
+                header_parts.extend([
+                    f"{'Start':<8}",
+                    f"{'Stop':<8}",
+                ])
+            
+            header_parts.append(f"{'Pipeline':<{max_pipeline_len}}")
+            
             # Add step/PID columns if any running jobs
-            has_running = any(r["status"] == "running" for r in rows)
             if has_running:
                 header_parts.extend([
                     f"{'Step':<{max_step_len}}",
@@ -322,6 +344,7 @@ def _list_runs(output_json: bool = False) -> int:
             
             header_parts.extend([
                 f"{'Input':<{max_input_len}}",
+                f"{'Type':<4}",
                 f"{'Artifacts':>9}",
             ])
             
@@ -329,21 +352,44 @@ def _list_runs(output_json: bool = False) -> int:
             print(header)
             print("-" * len(header))
             
+            # Helper function to truncate input path intelligently
+            def truncate_input(input_str: str, max_width: int) -> str:
+                """Truncate input path with ellipsis if too long."""
+                if len(input_str) <= max_width:
+                    return input_str
+                # Show beginning and end with ellipsis in middle
+                if max_width < 10:
+                    # Too narrow, just truncate end
+                    return input_str[:max_width-1] + "…"
+                # Show first part and last part
+                prefix_len = (max_width - 3) // 2
+                suffix_len = max_width - prefix_len - 3
+                return input_str[:prefix_len] + "…" + input_str[-suffix_len:]
+            
             # Rows
             for row in rows:
-                start_str = row["start_time"] or "-"
-                stop_str = row["stop_time"] or "-"
                 artifacts_str = str(row["artifacts"]) if row["artifacts"] > 0 else "-"
+                
+                # Truncate input if needed
+                input_display = truncate_input(row["input"], max_input_len)
                 
                 row_parts = [
                     f"{row['icon']:2}",
                     f"{row['id']:<{max_id_len}}",
                     f"{row['status']:<{max_status_len}}",
                     f"{row['date']:<10}",
-                    f"{start_str:<8}",
-                    f"{stop_str:<8}",
-                    f"{row['pipeline']:<{max_pipeline_len}}",
                 ]
+                
+                # Only show Start/Stop times if we have finished jobs
+                if has_finished:
+                    start_str = row["start_time"] or "-"
+                    stop_str = row["stop_time"] or "-"
+                    row_parts.extend([
+                        f"{start_str:<8}",
+                        f"{stop_str:<8}",
+                    ])
+                
+                row_parts.append(f"{row['pipeline']:<{max_pipeline_len}}")
                 
                 # Add step/PID for running jobs
                 if has_running:
@@ -355,7 +401,8 @@ def _list_runs(output_json: bool = False) -> int:
                     ])
                 
                 row_parts.extend([
-                    f"{row['input']:<{max_input_len}}",
+                    f"{input_display:<{max_input_len}}",
+                    f"{row['input_type']:<4}",
                     f"{artifacts_str:>9}",
                 ])
                 

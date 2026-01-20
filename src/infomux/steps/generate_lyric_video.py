@@ -16,8 +16,11 @@ from __future__ import annotations
 import json
 import subprocess
 import time
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import ftfy
 
 from infomux.config import get_tool_paths
 from infomux.log import get_logger
@@ -99,6 +102,15 @@ class GenerateLyricVideoStep:
         if not input_path.exists():
             raise StepError(self.name, f"audio not found: {input_path}")
 
+        # Ensure we're using the original audio (not isolated vocals)
+        # The isolated vocals (audio_vocals.wav) should only be used for transcription
+        if input_path.name == "audio_vocals.wav":
+            logger.warning(
+                "generate_lyric_video received isolated vocals instead of original audio. "
+                "This will result in video without background music. "
+                "Check pipeline configuration - should use extract_audio output, not isolate_vocals."
+            )
+
         # Find transcript.json in output_dir
         json_path = output_dir / "transcript.json"
         if not json_path.exists():
@@ -108,21 +120,22 @@ class GenerateLyricVideoStep:
                 "Run transcribe_timed step first.",
             )
 
-        # Find word-level SRT file for soft subtitles (optional but recommended)
-        srt_path = output_dir / "transcript_words.srt"
-        if not srt_path.exists():
-            # Fallback to regular transcript.srt if word-level not available
-            srt_path = output_dir / "transcript.srt"
-            if not srt_path.exists():
-                logger.warning(
-                    "No SRT subtitle file found (transcript_words.srt or transcript.srt). "
-                    "Video will be created without soft subtitles."
-                )
-                srt_path = None
-            else:
-                logger.info("using transcript.srt for soft subtitles")
+        # Find both SRT files for dual subtitle tracks
+        # Line-level subtitles (transcript.srt) - normal captions
+        line_srt_path = output_dir / "transcript.srt"
+        if not line_srt_path.exists():
+            logger.warning("transcript.srt not found, line-level subtitles will be skipped")
+            line_srt_path = None
         else:
-            logger.info("using transcript_words.srt for soft subtitles")
+            logger.info("found transcript.srt for line-level subtitles")
+        
+        # Word-level subtitles (transcript_words.srt) - word-by-word captions
+        word_srt_path = output_dir / "transcript_words.srt"
+        if not word_srt_path.exists():
+            logger.warning("transcript_words.srt not found, word-level subtitles will be skipped")
+            word_srt_path = None
+        else:
+            logger.info("found transcript_words.srt for word-level subtitles")
 
         # Parse word timestamps from transcript.json
         words = self._parse_word_timestamps(json_path)
@@ -212,7 +225,8 @@ class GenerateLyricVideoStep:
             audio_duration,
             width,
             height,
-            srt_path=srt_path,
+            line_srt_path=line_srt_path,
+            word_srt_path=word_srt_path,
         )
 
         logger.debug("running: %s", " ".join(str(c) for c in cmd))
@@ -283,6 +297,11 @@ class GenerateLyricVideoStep:
         if not clean_text:
             return (True, "")
 
+        # Skip Unicode replacement characters and other problematic characters
+        if clean_text == "\ufffd" or (len(clean_text) == 1 and unicodedata.category(clean_text) == "So"):
+            # Unicode replacement character or other symbols that might be encoding artifacts
+            return (True, "")
+
         # Punctuation-only tokens are boundaries
         if clean_text in [",", ".", "!", "?", ";", ":", "-"]:
             return (True, clean_text)
@@ -343,6 +362,10 @@ class GenerateLyricVideoStep:
 
             for token in tokens:
                 raw_text = token.get("text", "")
+                # Fix Unicode encoding issues (mojibake, replacement characters)
+                raw_text = ftfy.fix_text(raw_text, normalization="NFC")
+                # Remove Unicode replacement characters that couldn't be fixed
+                raw_text = raw_text.replace("\ufffd", "")
                 is_boundary, clean_text = self._is_word_boundary(raw_text)
 
                 # Skip empty or special tokens
@@ -803,7 +826,8 @@ class GenerateLyricVideoStep:
         duration: float | None,
         width: int,
         height: int,
-        srt_path: Path | None = None,
+        line_srt_path: Path | None = None,
+        word_srt_path: Path | None = None,
     ) -> list[str]:
         """
         Build ffmpeg command using overlay filters for word images.
@@ -852,12 +876,21 @@ class GenerateLyricVideoStep:
             cmd.extend(["-i", str(img_path)])
             input_idx += 1
 
-        # Add SRT subtitle file as input for soft subtitles (if available)
-        subtitle_input_idx = None
-        if srt_path and srt_path.exists():
-            cmd.extend(["-i", str(srt_path)])
-            subtitle_input_idx = input_idx  # Current input index
-            logger.debug("adding soft subtitles from: %s", srt_path.name)
+        # Add line-level SRT subtitle file (if available)
+        line_subtitle_idx = None
+        if line_srt_path and line_srt_path.exists():
+            cmd.extend(["-i", str(line_srt_path)])
+            line_subtitle_idx = input_idx
+            input_idx += 1
+            logger.debug("adding line-level subtitles from: %s", line_srt_path.name)
+
+        # Add word-level SRT subtitle file (if available)
+        word_subtitle_idx = None
+        if word_srt_path and word_srt_path.exists():
+            cmd.extend(["-i", str(word_srt_path)])
+            word_subtitle_idx = input_idx
+            input_idx += 1
+            logger.debug("adding word-level subtitles from: %s", word_srt_path.name)
 
         if not word_image_paths:
             raise StepError(
@@ -875,6 +908,18 @@ class GenerateLyricVideoStep:
             img_input_idx = 2 + i  # Image input index (after audio=0, background=1)
             start_sec = pw.word.start_ms / 1000.0
             end_sec = pw.word.end_ms / 1000.0
+            
+            # Log first few words for timing debugging
+            if i < 5:
+                logger.debug(
+                    "word %d: '%s' timing %.3f-%.3f (from JSON: %d-%d ms)",
+                    i + 1,
+                    pw.word.text,
+                    start_sec,
+                    end_sec,
+                    pw.word.start_ms,
+                    pw.word.end_ms,
+                )
             
             # Build overlay filter with enable expression
             # overlay=x=X:y=Y:enable='between(t,START,END)'
@@ -920,14 +965,26 @@ class GenerateLyricVideoStep:
             ]
         )
 
-        # Map soft subtitle stream if SRT file was provided
-        if subtitle_input_idx is not None:
+        # Map line-level subtitle stream (first subtitle track)
+        subtitle_track = 0
+        if line_subtitle_idx is not None:
             cmd.extend(
                 [
                     "-map",
-                    f"{subtitle_input_idx}:s",  # Map subtitles from SRT input
+                    f"{line_subtitle_idx}:s",  # Map line-level subtitles
                 ]
             )
+            subtitle_track += 1
+
+        # Map word-level subtitle stream (second subtitle track)
+        if word_subtitle_idx is not None:
+            cmd.extend(
+                [
+                    "-map",
+                    f"{word_subtitle_idx}:s",  # Map word-level subtitles
+                ]
+            )
+            subtitle_track += 1
 
         # Only use -shortest if we couldn't determine duration
         if duration is None:
@@ -947,16 +1004,34 @@ class GenerateLyricVideoStep:
             ]
         )
 
-        # Add subtitle codec if subtitles are included
-        if subtitle_input_idx is not None:
-            cmd.extend(
-                [
-                    "-c:s",
-                    "mov_text",  # Subtitle codec for MP4 (soft subtitles - toggleable)
-                    "-metadata:s:s:0",
-                    "language=eng",  # Set subtitle language
-                ]
-            )
+        # Add subtitle codec and metadata for all subtitle tracks
+        if line_subtitle_idx is not None or word_subtitle_idx is not None:
+            cmd.extend(["-c:s", "mov_text"])  # Subtitle codec for MP4 (soft subtitles - toggleable)
+            
+            # Set metadata for line-level subtitles (track 0)
+            if line_subtitle_idx is not None:
+                cmd.extend(
+                    [
+                        "-metadata:s:s:0",
+                        "language=eng",
+                        "-metadata:s:s:0",
+                        "title=English",  # Display name for line-level track
+                        "-disposition:s:0",
+                        "default",  # Make line-level subtitles default
+                    ]
+                )
+            
+            # Set metadata for word-level subtitles (track 1)
+            if word_subtitle_idx is not None:
+                track_num = 1 if line_subtitle_idx is not None else 0
+                cmd.extend(
+                    [
+                        f"-metadata:s:s:{track_num}",
+                        "language=eng",
+                        f"-metadata:s:s:{track_num}",
+                        "title=English - Word Level",  # Display name for word-level track
+                    ]
+                )
 
         cmd.append(str(output))
 

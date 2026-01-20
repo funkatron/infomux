@@ -459,6 +459,7 @@ Stopping: stop word 'stop recording'
 | `caption-burn` | Burned-in subtitles (permanent) | extract_audio → transcribe_timed → embed_subs |
 | `audio-to-video` | Generate video from audio with burned subtitles | extract_audio → transcribe_timed → generate_video |
 | `lyric-video` | Generate lyric video with word-level burned subtitles | extract_audio → transcribe_timed → generate_lyric_video |
+| `lyric-video-isolated` | Generate lyric video with vocal isolation for improved timing | extract_audio → isolate_vocals → transcribe_timed → generate_lyric_video |
 
 ```bash
 # List available pipelines
@@ -473,6 +474,7 @@ infomux inspect --list-steps
 | Step | Input | Output | Tool |
 |------|-------|--------|------|
 | `extract_audio` | media file | `audio.wav` (16kHz mono) | ffmpeg |
+| `isolate_vocals` | `audio.wav` | `audio_vocals.wav` (isolated vocals) | demucs or spleeter |
 | `transcribe` | `audio.wav` | `transcript.txt` | whisper-cli |
 | `transcribe_timed` | `audio.wav` | `transcript.srt`, `.vtt`, `.json` | whisper-cli -dtw |
 | `summarize` | `transcript.txt` | `summary.md` | Ollama (chunked for long input) |
@@ -516,6 +518,12 @@ input.m4a → [extract_audio] → audio.wav → [transcribe_timed] → transcrip
                                                                     ↓
                                                           [generate_lyric_video] → audio_lyric_video.mp4
                                                           (each word appears at exact timing)
+
+# lyric-video-isolated pipeline (with vocal isolation for better timing)
+input.m4a → [extract_audio] → audio.wav → [isolate_vocals] → audio_vocals.wav → [transcribe_timed] → transcript.json
+                                                                                                        ↓
+                                                                                          [generate_lyric_video] → audio_lyric_video.mp4
+                                                                                          (uses original audio.wav for video, isolated vocals for timing)
 ```
 
 ### Pipeline Artifacts
@@ -793,6 +801,24 @@ infomux stream --list-devices
 
 On macOS, you may need to grant Terminal/your IDE microphone access in System Preferences → Privacy & Security → Microphone.
 
+### `demucs not found` or `spleeter not found` (for vocal isolation)
+
+The `isolate_vocals` step requires either Demucs or Spleeter:
+
+```bash
+# Install Demucs (recommended for better quality)
+uv pip install demucs
+
+# Or install Spleeter (faster but lower quality)
+uv pip install spleeter
+```
+
+Then use the `lyric-video-isolated` pipeline:
+
+```bash
+uv run infomux run --pipeline lyric-video-isolated <your-audio-file>
+```
+
 ---
 
 ## Project Structure
@@ -848,6 +874,7 @@ src/infomux/
 
 **Steps:**
 - `extract_audio` — ffmpeg → 16kHz mono WAV
+- `isolate_vocals` — demucs/spleeter → isolated vocal track (optional, improves timing)
 - `transcribe` — whisper-cli → transcript.txt
 - `transcribe_timed` — whisper-cli -dtw → .srt/.vtt/.json
 - `summarize` — Ollama with chunking, content hints, `--model` override
@@ -860,6 +887,7 @@ src/infomux/
 **Pipelines:**
 - `transcribe`, `summarize`, `timed`, `report`, `report-store`
 - `caption`, `caption-burn` — video subtitle embedding
+- `lyric-video`, `lyric-video-isolated` — word-level lyric videos
 
 **Streaming:**
 - Real-time audio capture and transcription
