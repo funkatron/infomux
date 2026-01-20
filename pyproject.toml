@@ -38,6 +38,12 @@ ocr = [
     # pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
     # Or use the Metal-accelerated version for better performance
 ]
+alignment = [
+    "aeneas>=1.7.3",  # Forced alignment for official lyrics (requires numpy, lxml, BeautifulSoup4)
+    # Note: Install numpy first: uv pip install numpy
+    # Then: uv pip install aeneas
+    # System dependencies: ffmpeg, espeak
+]
 
 [project.scripts]
 infomux = "infomux.cli:main"
