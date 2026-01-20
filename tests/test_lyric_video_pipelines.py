@@ -243,23 +243,6 @@ Five times by design. I'm still alive."""
         assert generate_lyric_video is not None
         assert generate_lyric_video.input_from == "extract_audio"  # Uses extracted audio (with music)
 
-
-        isolate_vocals = pipeline.get_step("isolate_vocals")
-        assert isolate_vocals is not None
-        assert isolate_vocals.input_from is None  # Uses original input
-
-        align_lyrics = pipeline.get_step("align_lyrics")
-        assert align_lyrics is not None
-        assert align_lyrics.input_from == "isolate_vocals"  # Aligns to isolated vocals (better accuracy)
-
-        extract_audio = pipeline.get_step("extract_audio")
-        assert extract_audio is not None
-        assert extract_audio.input_from is None  # Uses original input
-
-        generate_lyric_video = pipeline.get_step("generate_lyric_video")
-        assert generate_lyric_video is not None
-        assert generate_lyric_video.input_from == "extract_audio"  # Uses extracted audio (with music)
-
     def test_lyrics_file_reading(self, tmp_path: Path) -> None:
         """Test that lyrics file can be read and used by align_lyrics step."""
         from infomux.steps.align_lyrics import AlignLyricsStep
