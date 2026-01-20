@@ -105,68 +105,85 @@ def configure_parser(parser: ArgumentParser) -> None:
         "input",
         type=str,
         nargs="?",  # Optional when using --check-deps
-        help="Path to the input media file or URL (http:// or https://)",
+        help="Path to the input media file or URL (http:// or https://). "
+        "Supports audio (mp3, m4a, wav), video (mp4, mov), and text/html files. "
+        "URLs are automatically downloaded to the run directory.",
     )
     parser.add_argument(
         "--pipeline",
         "-p",
         type=str,
         default=None,
-        help="Pipeline to run (default: transcribe)",
+        help="Pipeline to run (default: transcribe). "
+        "Use 'infomux inspect --list-pipelines' to see available pipelines. "
+        "HTML/text files automatically use 'web-summarize' pipeline unless overridden.",
     )
     parser.add_argument(
         "--steps",
         type=str,
         default=None,
-        help="Comma-separated list of steps to run (subset of pipeline)",
+        help="Comma-separated list of steps to run (subset of pipeline). "
+        "Only runs the specified steps and their dependencies. "
+        "Example: --steps extract_audio,transcribe",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Show what would be done without executing",
+        help="Show what would be done without executing. "
+        "Displays the pipeline, steps, and job configuration that would be used.",
     )
     parser.add_argument(
         "--check-deps",
         action="store_true",
-        help="Check for required dependencies and exit",
+        help="Check for required dependencies (ffmpeg, whisper-cli, models) and exit. "
+        "Shows status of all dependencies including optional ones like EasyOCR.",
     )
     parser.add_argument(
         "--model",
         "-m",
         type=str,
         default=None,
-        help="Ollama model for summarization (e.g., qwen2.5:32b-instruct)",
+        help="Ollama model for summarization steps. "
+        "Overrides the default model. Example: qwen2.5:32b-instruct, llama3.2:3b",
     )
     parser.add_argument(
         "--content-type-hint",
         type=str,
         default=None,
         metavar="TYPE",
-        help="Hint for content type: meeting, talk, podcast, lecture, standup, 1on1, or custom",
+        help="Hint for content type to improve summarization quality. "
+        "Options: meeting, talk, podcast, lecture, standup, 1on1, or any custom string. "
+        "This affects the prompt used for LLM summarization.",
     )
     parser.add_argument(
         "--word-level-subtitles",
         action="store_true",
-        help="Generate word-level subtitles where each word appears individually (experimental)",
+        help="Generate word-level subtitles where each word appears individually. "
+        "Experimental feature that creates more granular subtitle timing. "
+        "Requires transcribe_timed step.",
     )
     parser.add_argument(
         "--video-background-image",
         type=Path,
         default=None,
-        help="Background image for video generation (requires audio-to-video pipeline)",
+        help="Background image for video generation (requires audio-to-video pipeline). "
+        "Path to an image file to use as background when generating video from audio.",
     )
     parser.add_argument(
         "--video-background-color",
         type=str,
         default=None,
-        help="Background color for video generation (default: black)",
+        help="Background color for video generation (default: black). "
+        "Can be a color name (e.g., 'blue') or hex code (e.g., '#FF0000'). "
+        "Requires audio-to-video pipeline.",
     )
     parser.add_argument(
         "--video-size",
         type=str,
         default=None,
         metavar="WxH",
-        help="Video dimensions for video generation (default: 1920x1080)",
+        help="Video dimensions for video generation (default: 1920x1080). "
+        "Format: WIDTHxHEIGHT (e.g., 1280x720). Requires audio-to-video pipeline.",
     )
 
 

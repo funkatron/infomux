@@ -37,35 +37,46 @@ def configure_parser(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Preview what would be deleted without actually deleting",
+        help="Preview what would be deleted without actually deleting. "
+        "Always use this first to see what would be removed. Shows run IDs and reasons.",
     )
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Actually delete runs (required unless --dry-run)",
+        help="Actually delete runs. Required to perform deletion (unless using --dry-run). "
+        "This is a safety measure to prevent accidental deletion.",
     )
     parser.add_argument(
         "--orphaned",
         action="store_true",
-        help="Delete runs without valid job.json files",
+        help="Delete runs without valid job.json files. "
+        "These are typically incomplete or corrupted runs that can't be resumed or inspected.",
     )
     parser.add_argument(
         "--status",
         type=str,
         choices=["pending", "running", "failed", "interrupted", "completed"],
-        help="Delete runs with specific status",
+        help="Delete runs with specific status. "
+        "Common use: --status running (to clean up stuck/interrupted runs). "
+        "Use with --older-than for safety (e.g., delete failed runs older than 7 days).",
     )
     parser.add_argument(
         "--older-than",
         type=str,
         metavar="N[d|w|m]",
-        help="Delete runs older than specified time (e.g., 30d, 2w, 1m)",
+        help="Delete runs older than specified time. "
+        "Format: number followed by unit (d=days, w=weeks, m=months). "
+        "Examples: 30d (30 days), 2w (2 weeks), 1m (1 month). "
+        "Can be combined with --status for more targeted cleanup.",
     )
     parser.add_argument(
         "--min-age",
         type=str,
         metavar="N[d|w|m]",
-        help="Minimum age for runs to be considered (safety check, e.g., 1d)",
+        help="Minimum age for runs to be considered (safety check). "
+        "Prevents deletion of very recent runs even if they match other criteria. "
+        "Example: --min-age 1d (only delete runs at least 1 day old). "
+        "Useful when combining with --status or --older-than.",
     )
 
 

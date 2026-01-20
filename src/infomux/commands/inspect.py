@@ -41,39 +41,46 @@ def configure_parser(parser: ArgumentParser) -> None:
         type=str,
         nargs="?",
         default=None,
-        help="ID of the run to inspect",
+        help="ID of the run to inspect (e.g., run-20260111-020549-c36c19). "
+        "Use 'infomux inspect --list' to see all available run IDs.",
     )
     parser.add_argument(
         "--json",
         action="store_true",
-        help="Output as JSON (default: human-readable)",
+        help="Output as JSON instead of human-readable format. "
+        "Useful for scripting and automation with tools like jq.",
     )
     parser.add_argument(
         "--list",
         "-l",
         action="store_true",
         dest="list_runs",
-        help="List all runs instead of inspecting one",
+        help="List all runs in a tabular format showing status, date, pipeline, input, and artifacts. "
+        "Most recent runs appear first.",
     )
     parser.add_argument(
         "--list-pipelines",
         action="store_true",
-        help="List available pipelines and exit",
+        help="List all available pipelines with descriptions and steps. "
+        "Shows what pipelines are available for use with 'infomux run --pipeline'.",
     )
     parser.add_argument(
         "--list-steps",
         action="store_true",
-        help="List available steps and exit",
+        help="List all available steps with their output files. "
+        "Shows what processing steps can be used in pipelines.",
     )
     parser.add_argument(
         "--open",
         action="store_true",
-        help="Open the run directory in Finder (macOS) or file manager",
+        help="Open the run directory in Finder (macOS), Explorer (Windows), or file manager (Linux). "
+        "Useful for browsing artifacts manually.",
     )
     parser.add_argument(
         "--path",
         action="store_true",
-        help="Show the path to the run directory",
+        help="Show the absolute path to the run directory. "
+        "Useful for scripting or copying paths to other tools.",
     )
 
 

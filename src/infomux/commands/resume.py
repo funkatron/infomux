@@ -34,32 +34,38 @@ def configure_parser(parser: ArgumentParser) -> None:
     parser.add_argument(
         "run_id",
         type=str,
-        help="ID of the run to resume",
+        help="ID of the run to resume (e.g., run-20260111-020549-c36c19). "
+        "Use 'infomux inspect --list' to see all available run IDs.",
     )
     parser.add_argument(
         "--from-step",
         type=str,
         default=None,
-        help="Resume from a specific step (re-runs that step and all following)",
+        help="Resume from a specific step, re-running that step and all following steps. "
+        "Completed steps before this are skipped. Example: --from-step transcribe",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Show what would be done without executing",
+        help="Show what would be done without executing. "
+        "Displays which steps would be re-run and their configuration.",
     )
     parser.add_argument(
         "--model",
         "-m",
         type=str,
         default=None,
-        help="Ollama model for summarization (e.g., qwen2.5:32b-instruct)",
+        help="Ollama model for summarization steps. "
+        "Overrides the model used in the original run. Example: qwen2.5:32b-instruct",
     )
     parser.add_argument(
         "--content-type-hint",
         type=str,
         default=None,
         metavar="TYPE",
-        help="Hint for content type: meeting, talk, podcast, lecture, standup, 1on1, or custom",
+        help="Hint for content type to improve summarization quality. "
+        "Options: meeting, talk, podcast, lecture, standup, 1on1, or any custom string. "
+        "Overrides the hint from the original run.",
     )
 
 

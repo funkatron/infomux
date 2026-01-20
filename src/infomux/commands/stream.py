@@ -53,45 +53,55 @@ def configure_parser(parser: ArgumentParser) -> None:
         "-d",
         type=int,
         default=None,
-        help="Audio device ID (skip interactive selection)",
+        help="Audio device ID to use (skip interactive selection). "
+        "Use 'infomux stream --list-devices' to see available device IDs.",
     )
     parser.add_argument(
         "--list-devices",
         action="store_true",
-        help="List available audio devices and exit",
+        help="List all available audio input devices with their IDs and exit. "
+        "Use the ID with --device to select a specific microphone.",
     )
     parser.add_argument(
         "--no-save-audio",
         action="store_true",
-        help="Don't save the recorded audio (disables precise timestamps)",
+        help="Don't save the recorded audio file. "
+        "This disables precise word-level timestamps but saves disk space. "
+        "Only the transcript files are saved.",
     )
     parser.add_argument(
         "--language",
         "-l",
         type=str,
         default="en",
-        help="Spoken language (default: en)",
+        help="Spoken language code for transcription (default: en). "
+        "Examples: en, es, fr, de, ja. Use the ISO 639-1 language code.",
     )
     parser.add_argument(
         "--duration",
         type=int,
         default=None,
         metavar="SECONDS",
-        help="Stop recording after N seconds",
+        help="Stop recording after N seconds. "
+        "Useful for time-limited recordings. Example: --duration 300 (5 minutes).",
     )
     parser.add_argument(
         "--silence",
         type=int,
         default=None,
         metavar="SECONDS",
-        help="Stop recording after N seconds of silence",
+        help="Stop recording after N seconds of silence. "
+        "Great for dictation - automatically stops when you finish speaking. "
+        "Example: --silence 5 (stops after 5 seconds of silence).",
     )
     parser.add_argument(
         "--stop-word",
         type=str,
         default="stop recording",
         metavar="PHRASE",
-        help="Stop recording when this phrase is detected (default: 'stop recording')",
+        help="Stop recording when this phrase is detected in the transcript (default: 'stop recording'). "
+        "The phrase must be spoken clearly and detected by the transcription. "
+        "Example: --stop-word 'end note'",
     )
     parser.add_argument(
         "--pipeline",
@@ -99,26 +109,32 @@ def configure_parser(parser: ArgumentParser) -> None:
         type=str,
         default=None,
         metavar="NAME",
-        help="Pipeline to run after capture (e.g., transcribe, summarize)",
+        help="Pipeline to run after recording completes. "
+        "By default, only transcription is performed. "
+        "Use 'summarize' to also generate an LLM summary. "
+        "Use 'infomux inspect --list-pipelines' to see all options.",
     )
     parser.add_argument(
         "--list-pipelines",
         action="store_true",
-        help="List available pipelines and exit",
+        help="List available pipelines that can be used with --pipeline and exit.",
     )
     parser.add_argument(
         "--model",
         "-m",
         type=str,
         default=None,
-        help="Ollama model for summarization (e.g., qwen2.5:32b-instruct)",
+        help="Ollama model for summarization steps (if using --pipeline summarize). "
+        "Overrides the default model. Example: qwen2.5:32b-instruct",
     )
     parser.add_argument(
         "--content-type-hint",
         type=str,
         default=None,
         metavar="TYPE",
-        help="Hint for content type: meeting, talk, podcast, lecture, standup, 1on1, or custom",
+        help="Hint for content type to improve summarization quality. "
+        "Options: meeting, talk, podcast, lecture, standup, 1on1, or any custom string. "
+        "Only used if --pipeline includes summarization.",
     )
 
 
