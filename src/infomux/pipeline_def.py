@@ -348,38 +348,10 @@ LYRIC_VIDEO_ISOLATED_PIPELINE = PipelineDef(
     ],
 )
 
-# Lyric video pipeline with official lyrics alignment: use forced alignment for precise timing
-LYRIC_VIDEO_ALIGNED_PIPELINE = PipelineDef(
-    name="lyric-video-aligned",
-    description="Generate lyric video using official lyrics with forced alignment (requires --lyrics-file)",
-    steps=[
-        StepDef(
-            name="extract_audio",
-            input_from=None,
-        ),
-        StepDef(
-            name="align_lyrics",
-            input_from="extract_audio",  # Align lyrics to extracted audio
-            config={"language": "eng"},  # Language for alignment
-        ),
-        StepDef(
-            name="generate_lyric_video",
-            input_from="extract_audio",  # Use extracted audio for video
-            config={
-                "background_color": "black",
-                "video_size": "1920x1080",
-                "font_name": "Arial",
-                "font_size": 48,
-                "font_color": "white",
-                "position": "center",
-            },
-        ),
-    ],
-)
-
 # Lyric video pipeline with vocal isolation + official lyrics alignment
+# All lyric videos need vocal isolation for accurate timing
 LYRIC_VIDEO_ALIGNED_ISOLATED_PIPELINE = PipelineDef(
-    name="lyric-video-aligned-vocals",
+    name="lyric-video-aligned",
     description="Generate lyric video with vocal isolation and forced alignment (requires --lyrics-file)",
     steps=[
         StepDef(
@@ -424,8 +396,7 @@ PIPELINES: dict[str, PipelineDef] = {
     "web-summarize": WEB_SUMMARIZE_PIPELINE,
     "lyric-video": LYRIC_VIDEO_PIPELINE,
     "lyric-video-vocals": LYRIC_VIDEO_ISOLATED_PIPELINE,
-    "lyric-video-aligned": LYRIC_VIDEO_ALIGNED_PIPELINE,
-    "lyric-video-aligned-vocals": LYRIC_VIDEO_ALIGNED_ISOLATED_PIPELINE,
+    "lyric-video-aligned": LYRIC_VIDEO_ALIGNED_ISOLATED_PIPELINE,  # Always uses vocal isolation
     # Future pipelines (see docs/FUTURE_PLANS.md):
     # "image-summarize": Extract text from images (OCR) ? summarize
     # "document-summarize": Extract text from documents (PDF/DOCX/images) ? summarize
