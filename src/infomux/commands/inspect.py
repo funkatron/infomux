@@ -61,14 +61,7 @@ def execute(args: Namespace) -> int:
     """
     # List mode
     if args.list_runs:
-        runs = list_runs()
-        if not runs:
-            logger.info("no runs found")
-            return 0
-
-        for run_id in runs:
-            print(run_id, file=sys.stdout)
-        return 0
+        return _list_runs(args.json)
 
     # Inspect mode requires a run ID
     if not args.run_id:
@@ -95,6 +88,98 @@ def execute(args: Namespace) -> int:
     else:
         # Human-readable format
         _print_job_summary(job)
+
+    return 0
+
+
+def _list_runs(output_json: bool = False) -> int:
+    """
+    List all runs with summary information.
+
+    Args:
+        output_json: If True, output as JSON array.
+
+    Returns:
+        Exit code (0 for success).
+    """
+    runs = list_runs()
+    if not runs:
+        if output_json:
+            print("[]", file=sys.stdout)
+        else:
+            print("No runs found.")
+        return 0
+
+    if output_json:
+        # JSON output: array of run summaries
+        import json
+        summaries = []
+        for run_id in runs:
+            try:
+                job = load_job(run_id)
+                summary = {
+                    "id": job.id,
+                    "status": job.status,
+                    "created_at": job.created_at,
+                    "updated_at": job.updated_at,
+                }
+                if job.input:
+                    summary["input"] = {
+                        "path": job.input.path,
+                        "size_bytes": job.input.size_bytes,
+                    }
+                    if job.input.original_url:
+                        summary["input"]["original_url"] = job.input.original_url
+                if job.artifacts:
+                    summary["artifacts"] = job.artifacts
+                summaries.append(summary)
+            except Exception:
+                # Skip runs that can't be loaded
+                continue
+        print(json.dumps(summaries, indent=2), file=sys.stdout)
+    else:
+        # Human-readable output
+        print(f"Found {len(runs)} run(s):")
+        print()
+        for run_id in runs:
+            try:
+                job = load_job(run_id)
+                status_icon = {
+                    "pending": "○",
+                    "running": "◐",
+                    "completed": "●",
+                    "failed": "✗",
+                    "interrupted": "⚠",
+                }.get(job.status, "?")
+                
+                # Format date (just date part, not full timestamp)
+                created_date = job.created_at.split("T")[0] if "T" in job.created_at else job.created_at[:10]
+                
+                # Input file name
+                input_name = "?"
+                if job.input:
+                    from pathlib import Path
+                    input_path = Path(job.input.path)
+                    input_name = input_path.name
+                    if job.input.original_url:
+                        # Show URL for downloaded files
+                        from urllib.parse import urlparse
+                        parsed = urlparse(job.input.original_url)
+                        input_name = f"{parsed.netloc}...{input_path.suffix}" if parsed.netloc else input_name
+                
+                print(f"  {status_icon} {run_id}")
+                print(f"      Status: {job.status}")
+                print(f"      Created: {created_date}")
+                if job.input:
+                    print(f"      Input: {input_name}")
+                if job.artifacts:
+                    print(f"      Artifacts: {len(job.artifacts)} file(s)")
+                print()
+            except Exception as e:
+                # Show run ID even if we can't load details
+                logger.debug("failed to load run %s: %s", run_id, e)
+                print(f"  ? {run_id} (error loading)")
+                print()
 
     return 0
 

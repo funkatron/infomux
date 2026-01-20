@@ -220,8 +220,11 @@ infomux -v run my-file.mp4
 View details of a completed run.
 
 ```bash
-# List recent runs
+# List all runs with summary information
 infomux inspect --list
+
+# List runs as JSON (for scripting/automation)
+infomux inspect --list --json
 
 # View a specific run (tab-complete the run ID)
 infomux inspect run-20260111-020549-c36c19
@@ -233,7 +236,25 @@ infomux inspect --json run-20260111-020549-c36c19
 infomux inspect --json run-XXXXX | jq '.artifacts'
 ```
 
-**Example output:**
+**Example output (inspect --list):**
+
+```
+Found 5 run(s):
+
+  ● run-20260120-191406-7179cd
+      Status: completed
+      Created: 2026-01-20
+      Input: audio.simplecast.com....mp3
+      Artifacts: 5 file(s)
+
+  ● run-20260120-190809-ae6458
+      Status: completed
+      Created: 2026-01-20
+      Input: audio.simplecast.com....mp3
+      Artifacts: 2 file(s)
+```
+
+**Example output (inspect <run-id>):**
 
 ```
 Run: run-20260111-020549-c36c19
