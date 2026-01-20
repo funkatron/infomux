@@ -66,10 +66,6 @@ class TestLyricVideoIsolatedPipeline:
         assert generate_lyric_video is not None
         assert generate_lyric_video.input_from == "extract_audio"  # Uses extracted audio (with music)
 
-    @pytest.mark.skip(
-        reason="Requires real audio file and external tools (ffmpeg, demucs, whisper-cli). "
-        "Run manually with: infomux run --pipeline lyric-video-isolated <audio-file>"
-    )
     def test_pipeline_execution_with_real_file(self, tmp_path: Path, monkeypatch) -> None:
         """
         Test pipeline execution with real audio file.
@@ -318,10 +314,6 @@ Five times by design. I'm still alive."""
             step4.execute(audio_file, tmp_path)
         assert "empty" in str(exc_info.value).lower()
 
-    @pytest.mark.skip(
-        reason="Requires real audio file, lyrics file, and external tools (ffmpeg, aeneas, demucs). "
-        "Run manually with: infomux run --pipeline lyric-video-aligned-isolated --lyrics-file lyrics.txt <audio-file>"
-    )
     def test_aligned_pipeline_with_lyrics_file(self, tmp_path: Path, monkeypatch) -> None:
         """
         Test aligned pipeline execution with official lyrics file.
