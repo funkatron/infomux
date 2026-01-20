@@ -96,9 +96,11 @@ class IsolateVocalsStep:
 
         # Build demucs command
         # --two-stems=vocals extracts vocals vs everything else
+        # --mp3 output format avoids torchcodec dependency issues
         cmd = [
             "demucs",
             "--two-stems=vocals",
+            "--mp3",  # Use MP3 output to avoid torchcodec issues
             "-o",
             str(temp_output),
         ]
