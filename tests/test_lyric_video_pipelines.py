@@ -136,7 +136,7 @@ class TestLyricVideoVocalsPipeline:
         assert len(video_files) > 0, "generate_lyric_video should create lyric video"
         
         # Verify transcript.json has word-level timestamps
-        with open(run_dir / "transcript.json", encoding="utf-8") as f:
+        with open(run_dir / "transcript.json", encoding="utf-8", errors="replace") as f:
             transcript_data = json.load(f)
         
         assert "transcription" in transcript_data
@@ -387,7 +387,7 @@ Five times by design. I'm still alive."""
         assert len(video_files) > 0, "generate_lyric_video should create lyric video"
         
         # Verify transcript.json has word-level timestamps matching official lyrics
-        with open(run_dir / "transcript.json", encoding="utf-8") as f:
+        with open(run_dir / "transcript.json", encoding="utf-8", errors="replace") as f:
             transcript_data = json.load(f)
         
         assert "transcription" in transcript_data
