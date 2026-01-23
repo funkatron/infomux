@@ -1052,12 +1052,13 @@ class GenerateLyricVideoStep:
                     )
             
             # Build overlay filter with enable expression
-            # overlay=x=X:y=Y:enable='between(t,START,END)'
+            # overlay=x=X:y=Y:format=auto:enable='between(t,START,END)'
+            # format=auto is required to properly blend RGBA images with alpha
             # Note: current_input already contains brackets (e.g., [1:v] or [v155])
             # Note: overlay filter uses 'enable', not 'if' (unlike drawtext)
             overlay_filter = (
                 f"{current_input}[{img_input_idx}:v]"
-                f"overlay={pw.x}:{pw.y}:"
+                f"overlay={pw.x}:{pw.y}:format=auto:"
                 f"enable='between(t,{start_sec:.3f},{end_sec:.3f})'"
             )
             
