@@ -1,12 +1,15 @@
 """
 Forced alignment step: align official lyrics to audio for precise word-level timing.
 
-Uses aeneas or similar forced alignment tools to synchronize known lyrics text
+Uses stable-ts (Whisper-based) or aeneas to synchronize known lyrics text
 with audio, producing word-level timestamps. This is more accurate than
 transcription-based timing when you have the official lyrics.
 
-Command (aeneas):
-    python -m aeneas.tools.execute_task audio.wav lyrics.txt config syncmap.json
+Backends:
+    - stable-ts (default): Uses Whisper model for alignment. Works on Python 3.12+.
+      Install: uv pip install stable-ts
+    - aeneas: Traditional forced alignment. Requires Python 3.11 due to numpy.distutils.
+      Install: uv pip install numpy && uv pip install aeneas
 
 Output:
     transcript.json - Word-level timestamps matching official lyrics
@@ -15,10 +18,13 @@ Output:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from infomux.config import get_tool_paths
 from infomux.log import get_logger
@@ -26,11 +32,37 @@ from infomux.steps import StepError, StepResult, register_step
 
 logger = get_logger(__name__)
 
+# Backend type for alignment
+AlignmentBackend = Literal["stable-ts", "aeneas", "auto"]
+
 # Output filename for aligned transcript
 TRANSCRIPT_JSON_FILENAME = "transcript.json"
 
 # Register output filename for pipeline input resolution
 OUTPUT_FILENAME = TRANSCRIPT_JSON_FILENAME
+
+
+def _check_stable_ts_available() -> bool:
+    """Check if stable-ts is available."""
+    try:
+        import stable_whisper
+        return True
+    except ImportError:
+        return False
+
+
+def _check_aeneas_available() -> bool:
+    """Check if aeneas is available."""
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "aeneas.tools.execute_task", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+        return False
 
 
 @register_step
@@ -42,11 +74,17 @@ class AlignLyricsStep:
     Takes official lyrics text and audio, and produces word-level timestamps
     that precisely match the lyrics to the audio. More accurate than transcription
     when you have the exact lyrics.
+
+    Supports two backends:
+    - stable-ts: Whisper-based alignment (Python 3.12+, recommended)
+    - aeneas: Traditional forced alignment (Python 3.11 only)
     """
 
     name: str = "align_lyrics"
     lyrics_file: str | Path | None = None  # Path to lyrics text file (if None, looks for lyrics.txt in output_dir)
     language: str = "eng"  # Language code for alignment
+    backend: AlignmentBackend = "auto"  # Which backend to use (auto, stable-ts, aeneas)
+    model: str = "base"  # Whisper model for stable-ts (tiny, base, small, medium, large)
 
     def execute(self, input_path: Path, output_dir: Path) -> list[Path]:
         """
@@ -108,7 +146,167 @@ class AlignLyricsStep:
                 raise StepError(self.name, "lyrics file is empty")
         except Exception as e:
             raise StepError(self.name, f"failed to read lyrics file: {e}")
-        
+
+        # Determine which backend to use
+        use_backend = self.backend
+        if use_backend == "auto":
+            if _check_stable_ts_available():
+                use_backend = "stable-ts"
+                logger.debug("auto-detected backend: stable-ts")
+            elif _check_aeneas_available():
+                use_backend = "aeneas"
+                logger.debug("auto-detected backend: aeneas")
+            else:
+                raise StepError(
+                    self.name,
+                    "No alignment backend available. Install stable-ts (uv pip install stable-ts) "
+                    "or aeneas (requires Python 3.11)."
+                )
+
+        # Use the selected backend
+        if use_backend == "stable-ts":
+            return self._align_with_stable_ts(input_path, output_dir, lyrics_text)
+        else:
+            return self._align_with_aeneas(input_path, output_dir, lyrics_text)
+
+    def _align_with_stable_ts(
+        self, input_path: Path, output_dir: Path, lyrics_text: str
+    ) -> list[Path]:
+        """
+        Align lyrics using stable-ts (Whisper-based alignment).
+
+        Args:
+            input_path: Path to audio file.
+            output_dir: Directory for output.
+            lyrics_text: Lyrics text to align.
+
+        Returns:
+            List containing path to transcript.json.
+        """
+        try:
+            import stable_whisper
+        except ImportError:
+            raise StepError(
+                self.name,
+                "stable-ts not installed. Install via: uv pip install stable-ts"
+            )
+
+        logger.info("using stable-ts backend with model: %s", self.model)
+
+        try:
+            # Load model
+            model = stable_whisper.load_model(self.model)
+
+            # Convert language code (aeneas uses 'eng', whisper uses 'en')
+            lang = self.language
+            if lang == "eng":
+                lang = "en"
+            elif len(lang) > 2:
+                # Try to use first 2 characters for ISO 639-1 code
+                lang = lang[:2]
+
+            # Perform alignment
+            logger.debug("aligning %d characters of lyrics", len(lyrics_text))
+            result = model.align(
+                str(input_path),
+                lyrics_text,
+                language=lang,
+                verbose=False,
+            )
+
+            # Convert stable-ts result to transcript.json format
+            output_path = output_dir / TRANSCRIPT_JSON_FILENAME
+            self._convert_stable_ts_to_transcript_json(result, output_path)
+
+            if not output_path.exists():
+                raise StepError(self.name, f"output file not created: {output_path}")
+
+            size = output_path.stat().st_size
+            word_count = sum(len(seg.words) for seg in result.segments)
+            logger.info(
+                "aligned lyrics: %s (%d bytes, %d words)",
+                output_path.name, size, word_count
+            )
+            return [output_path]
+
+        except Exception as e:
+            if "StepError" in type(e).__name__:
+                raise
+            raise StepError(self.name, f"stable-ts alignment failed: {e}")
+
+    def _convert_stable_ts_to_transcript_json(
+        self, result, output_path: Path
+    ) -> None:
+        """
+        Convert stable-ts WhisperResult to transcript.json format.
+
+        Args:
+            result: stable_whisper.WhisperResult object.
+            output_path: Path to write transcript.json.
+        """
+        def format_timestamp(seconds: float) -> str:
+            """Format seconds as HH:MM:SS,mmm"""
+            ms = int(seconds * 1000)
+            total_seconds = ms // 1000
+            milliseconds = ms % 1000
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            secs = total_seconds % 60
+            return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
+
+        transcription = []
+
+        for seg_idx, segment in enumerate(result.segments):
+            tokens = []
+            for word in segment.words:
+                token = {
+                    "text": word.word,
+                    "timestamps": {
+                        "from": format_timestamp(word.start),
+                        "to": format_timestamp(word.end),
+                    },
+                }
+                tokens.append(token)
+
+            if tokens:
+                seg_data = {
+                    "id": seg_idx,
+                    "start": format_timestamp(segment.start),
+                    "end": format_timestamp(segment.end),
+                    "text": segment.text,
+                    "tokens": tokens,
+                }
+                transcription.append(seg_data)
+
+        transcript_data = {
+            "transcription": transcription,
+        }
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(transcript_data, f, indent=2, ensure_ascii=False)
+
+        total_words = sum(len(seg.get("tokens", [])) for seg in transcription)
+        logger.debug(
+            "converted stable-ts result to transcript.json: %d segments, %d words",
+            len(transcription), total_words
+        )
+
+    def _align_with_aeneas(
+        self, input_path: Path, output_dir: Path, lyrics_text: str
+    ) -> list[Path]:
+        """
+        Align lyrics using aeneas (traditional forced alignment).
+
+        Args:
+            input_path: Path to audio file.
+            output_dir: Directory for output.
+            lyrics_text: Lyrics text to align.
+
+        Returns:
+            List containing path to transcript.json.
+        """
+        logger.info("using aeneas backend")
+
         # Convert lyrics to MPLAIN format for better word-level alignment
         # MPLAIN: paragraphs separated by blank lines, sentences on separate lines
         # For lyrics, treat each line as a sentence, group stanzas as paragraphs
@@ -132,7 +330,7 @@ class AlignLyricsStep:
             "-c:a", "pcm_s16le",  # 16-bit PCM
             str(temp_audio),
         ]
-        
+
         logger.debug("converting audio for aeneas: %s", " ".join(convert_cmd))
         convert_result = subprocess.run(
             convert_cmd,
@@ -140,39 +338,32 @@ class AlignLyricsStep:
             text=True,
             check=False,
         )
-        
+
         if convert_result.returncode != 0:
             logger.error("ffmpeg conversion failed: %s", convert_result.stderr[-500:])
             raise StepError(
                 self.name,
                 f"failed to convert audio for aeneas: {convert_result.returncode}",
             )
-        
+
         if not temp_audio.exists():
             raise StepError(self.name, "converted audio file not created")
-        
+
         # Use the converted audio file for alignment
         audio_for_alignment = temp_audio
 
-        # Check if aeneas is available (use sys.executable to use the same Python as the script)
-        import sys
+        # Check if aeneas is available
         python_exe = sys.executable
-        try:
-            result = subprocess.run(
-                [python_exe, "-m", "aeneas.tools.execute_task", "--help"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-        except (FileNotFoundError, subprocess.TimeoutExpired):
+        if not _check_aeneas_available():
             raise StepError(
                 self.name,
-                "aeneas not found. Install via: uv pip install numpy && uv pip install aeneas",
+                "aeneas not found. Requires Python 3.11. "
+                "Install via: uv pip install numpy && uv pip install aeneas",
             )
 
         # Prepare temporary files
         temp_syncmap = output_dir / "syncmap.json"
-        
+
         # Build aeneas command
         # Use word-level alignment with non-speech masking for music
         # Use macOS built-in TTS if available, otherwise fall back to espeak
@@ -181,13 +372,11 @@ class AlignLyricsStep:
             tts_engine = "macos"  # Use macOS built-in TTS (no espeak needed)
         else:
             tts_engine = "espeak"  # Default to espeak on Linux
-        
+
         # Use MPLAIN (multilevel plain) format for better word-level alignment
-        # MPLAIN: paragraphs separated by blank lines, sentences on separate lines
-        # This gives us multilevel fragments (paragraph -> sentence -> word)
         config_string = (
             f"task_language={self.language}|"
-            "is_text_type=mplain|"  # Multilevel plain text for word-level alignment
+            "is_text_type=mplain|"
             "os_task_file_format=json|"
             f"tts={tts_engine}|"
             "mfcc_mask_nonspeech=True|"
@@ -197,25 +386,23 @@ class AlignLyricsStep:
         # Write MPLAIN formatted text to temporary file
         temp_lyrics = output_dir / "lyrics_mplain.txt"
         temp_lyrics.write_text(mplain_text, encoding="utf-8")
-        
+
         cmd = [
-            python_exe,  # Use the same Python executable
+            python_exe,
             "-m",
             "aeneas.tools.execute_task",
-            str(audio_for_alignment),  # Use converted audio
-            str(temp_lyrics),  # Use MPLAIN formatted lyrics
+            str(audio_for_alignment),
+            str(temp_lyrics),
             config_string,
             str(temp_syncmap),
-            "--presets-word",  # Word-level alignment
+            "--presets-word",
         ]
 
         logger.debug("running: %s", " ".join(cmd))
 
-        # Set environment variables for aeneas (UTF-8 encoding, etc.)
-        import os
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "UTF-8"
-        
+
         try:
             result = subprocess.run(
                 cmd,
@@ -250,31 +437,35 @@ class AlignLyricsStep:
 
             # Convert aeneas syncmap to transcript.json format
             output_path = output_dir / TRANSCRIPT_JSON_FILENAME
-            self._convert_syncmap_to_transcript_json(temp_syncmap, lyrics_text, output_path)
+            self._convert_aeneas_syncmap_to_transcript_json(
+                temp_syncmap, lyrics_text, output_path
+            )
 
             # Clean up temporary files
-            if temp_syncmap.exists():
-                temp_syncmap.unlink()
-            if temp_audio.exists():
-                temp_audio.unlink()
-            if temp_lyrics.exists():
-                temp_lyrics.unlink()
+            for temp_file in [temp_syncmap, temp_audio, temp_lyrics]:
+                if temp_file.exists():
+                    temp_file.unlink()
 
             if not output_path.exists():
                 raise StepError(self.name, f"output file not created: {output_path}")
 
             size = output_path.stat().st_size
-            logger.info("aligned lyrics: %s (%d bytes, %d words)", output_path.name, size, len(lyrics_text.split()))
+            logger.info(
+                "aligned lyrics: %s (%d bytes, %d words)",
+                output_path.name, size, len(lyrics_text.split())
+            )
             return [output_path]
 
         except FileNotFoundError:
             raise StepError(
-                self.name, "aeneas not found. Install via: uv pip install numpy && uv pip install aeneas"
+                self.name,
+                "aeneas not found. Requires Python 3.11. "
+                "Install via: uv pip install numpy && uv pip install aeneas"
             )
         except subprocess.SubprocessError as e:
             raise StepError(self.name, f"subprocess error: {e}")
 
-    def _convert_syncmap_to_transcript_json(
+    def _convert_aeneas_syncmap_to_transcript_json(
         self, syncmap_path: Path, lyrics_text: str, output_path: Path
     ) -> None:
         """
@@ -422,6 +613,8 @@ def run(
     output_dir: Path,
     lyrics_file: Path | None = None,
     language: str = "eng",
+    backend: AlignmentBackend = "auto",
+    model: str = "base",
 ) -> StepResult:
     """
     Convenience function to run the align_lyrics step.
@@ -431,11 +624,18 @@ def run(
         output_dir: Directory containing lyrics file and for output.
         lyrics_file: Optional path to lyrics file (if None, looks for lyrics.txt).
         language: Language code for alignment (default: "eng").
+        backend: Alignment backend ("auto", "stable-ts", or "aeneas").
+        model: Whisper model for stable-ts (default: "base").
 
     Returns:
         StepResult with execution details.
     """
-    step = AlignLyricsStep(lyrics_file=lyrics_file, language=language)
+    step = AlignLyricsStep(
+        lyrics_file=lyrics_file,
+        language=language,
+        backend=backend,
+        model=model,
+    )
     start_time = time.monotonic()
 
     try:
@@ -446,6 +646,12 @@ def run(
             success=True,
             outputs=outputs,
             duration_seconds=duration,
+            model_info={
+                "backend": backend if backend != "auto" else (
+                    "stable-ts" if _check_stable_ts_available() else "aeneas"
+                ),
+                "model": model if backend in ("auto", "stable-ts") else None,
+            },
         )
     except StepError as e:
         duration = time.monotonic() - start_time

@@ -819,30 +819,37 @@ Then use the `lyric-video-vocals` pipeline:
 uv run infomux run --pipeline lyric-video-vocals <your-audio-file>
 ```
 
-### `aeneas not found` (for forced alignment)
+### Forced alignment for official lyrics
 
-The `align_lyrics` step requires aeneas for forced alignment when you have official lyrics:
+The `lyric-video-aligned` pipeline aligns official lyrics to audio for precise word-level timing.
+Two backends are supported:
+
+**Option 1: stable-ts (recommended, Python 3.12+)**
+
+Uses Whisper for alignment. Simple installation, works on modern Python:
 
 ```bash
-# Install system dependency (macOS)
-brew install espeak
-
-# Install Python dependencies
-# Note: aeneas 1.7.3 requires numpy < 2.0 (numpy 2.x removed fromstring)
-uv pip install "numpy<2.0"
-
-# Set library paths for aeneas build (macOS)
-export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:$PKG_CONFIG_PATH"
-export LDFLAGS="-L/opt/homebrew/lib $LDFLAGS"
-export CPPFLAGS="-I/opt/homebrew/include $CPPFLAGS"
-
-# Install aeneas with no build isolation
-uv pip install --no-build-isolation aeneas
-
-# Linux: Install espeak: sudo apt-get install espeak (or equivalent)
+uv pip install stable-ts
 ```
 
-**Note:** aeneas 1.7.3 is incompatible with numpy 2.x. Install numpy < 2.0 first. On macOS, set the library paths so the linker can find espeak.
+**Option 2: aeneas (legacy, Python 3.11 only)**
+
+Traditional forced alignment. Requires Python 3.11 due to numpy.distutils removal in Python 3.12:
+
+```bash
+# Create a Python 3.11 environment
+uv venv --python 3.11 .venv311
+source .venv311/bin/activate
+
+# Install aeneas
+uv pip install numpy aeneas
+
+# (Optional) Install espeak for better TTS on Linux
+# sudo apt-get install espeak
+```
+
+**Note:** aeneas cannot be installed on Python 3.12+ because it requires `numpy.distutils` which was removed.
+The `align_lyrics` step auto-detects which backend is available and uses stable-ts by default.
 
 Then use the `lyric-video-aligned` pipeline with a lyrics file:
 
@@ -918,8 +925,8 @@ src/infomux/
 **Pipelines:**
 - `transcribe`, `summarize`, `timed`, `report`, `report-store`
 - `caption`, `caption-burn` — video subtitle embedding
-- `lyric-video`, `lyric-video-vocals` — word-level lyric videos
-- `lyric-video-aligned` — forced alignment with vocal isolation (requires aeneas)
+- `lyric-video`, `lyric-video-vocals` — word-level lyric videos (uses Whisper transcription)
+- `lyric-video-aligned` — forced alignment with vocal isolation (uses stable-ts or aeneas)
 
 **Streaming:**
 - Real-time audio capture and transcription
