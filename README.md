@@ -293,8 +293,12 @@ infomux inspect --list-steps
 # View a specific run (tab-complete the run ID)
 infomux inspect run-20260111-020549-c36c19
 
+# Use 'latest' to inspect the most recent run
+infomux inspect latest
+
 # Show the path to a run directory
 infomux inspect --path run-20260111-020549-c36c19
+infomux inspect --path latest  # Latest run
 
 # Open the run directory in Finder (macOS) or file manager
 infomux inspect --open run-20260111-020549-c36c19
@@ -304,6 +308,17 @@ infomux inspect --json run-20260111-020549-c36c19
 
 # Pipe to jq for specific fields
 infomux inspect --json run-XXXXX | jq '.artifacts'
+
+# View run log (full log file)
+infomux inspect --log latest
+
+# Tail log (last 50 lines)
+infomux inspect --tail latest
+
+# Follow log in real-time (great for monitoring running jobs)
+infomux inspect --follow latest
+# or use short form
+infomux inspect -f latest
 ```
 
 **Example output (inspect --list):**
