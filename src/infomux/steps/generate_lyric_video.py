@@ -154,12 +154,35 @@ class GenerateLyricVideoStep:
         if words:
             first_word_start = words[0].start_ms / 1000.0
             last_word_end = words[-1].end_ms / 1000.0
+            
+            # Check for large gaps in timing
+            gaps = []
+            for i in range(len(words) - 1):
+                gap_start = words[i].end_ms / 1000.0
+                gap_end = words[i + 1].start_ms / 1000.0
+                gap_duration = gap_end - gap_start
+                if gap_duration > 2.0:  # Gaps longer than 2 seconds
+                    gaps.append((gap_start, gap_end, gap_duration))
+            
             logger.info(
                 "word timing range: %.3f - %.3f seconds (%.2f seconds total)",
                 first_word_start,
                 last_word_end,
                 last_word_end - first_word_start,
             )
+            
+            if gaps:
+                logger.warning(
+                    "found %d large timing gaps (>2s) where no words will appear:",
+                    len(gaps)
+                )
+                for gap_start, gap_end, duration in gaps[:5]:  # Show first 5 gaps
+                    logger.warning(
+                        "  gap: %.2f - %.2f seconds (%.2f seconds, no words)",
+                        gap_start, gap_end, duration
+                    )
+                if len(gaps) > 5:
+                    logger.warning("  ... and %d more gaps", len(gaps) - 5)
             
             # Check if first word starts at 0 (might indicate timing offset)
             if first_word_start > 0.1:
