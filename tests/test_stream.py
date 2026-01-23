@@ -205,7 +205,7 @@ class TestFindSavedAudio:
         result = _find_saved_audio(run_dir)
 
         assert result is not None
-        assert result.name == "audio.wav"
+        assert result.name == "audio_full.wav"
         assert result.parent == run_dir
 
     def test_finds_audio_in_run_dir(self, tmp_path, monkeypatch):
@@ -213,7 +213,7 @@ class TestFindSavedAudio:
         run_dir = tmp_path / "run"
         run_dir.mkdir()
 
-        audio_file = run_dir / "audio.wav"
+        audio_file = run_dir / "audio_full.wav"
         audio_file.write_bytes(b"fake audio")
 
         result = _find_saved_audio(run_dir)
