@@ -23,7 +23,7 @@ from pathlib import Path
 
 from infomux.config import get_tool_paths
 from infomux.job import InputFile, JobEnvelope, JobStatus, generate_run_id
-from infomux.log import get_logger
+from infomux.log import configure_logging, get_logger
 from infomux.pipeline import run_pipeline
 from infomux.pipeline_def import get_pipeline
 from infomux.storage import get_run_dir, save_job
@@ -184,6 +184,84 @@ def configure_parser(parser: ArgumentParser) -> None:
         metavar="WxH",
         help="Video dimensions for video generation (default: 1920x1080). "
         "Format: WIDTHxHEIGHT (e.g., 1280x720). Requires audio-to-video pipeline.",
+    )
+    parser.add_argument(
+        "--lyric-font-name",
+        type=str,
+        default=None,
+        help="Font family name for lyric video (default: Arial). "
+        "Requires lyric-video pipeline.",
+    )
+    parser.add_argument(
+        "--lyric-font-file",
+        type=Path,
+        default=None,
+        help="Path to font file for lyric video (overrides --lyric-font-name). "
+        "Requires lyric-video pipeline.",
+    )
+    parser.add_argument(
+        "--lyric-font-size",
+        type=int,
+        default=None,
+        help="Font size in pixels for lyric video (default: 48). "
+        "Requires lyric-video pipeline.",
+    )
+    parser.add_argument(
+        "--lyrics-file",
+        type=Path,
+        default=None,
+        help="Path to official lyrics text file for forced alignment. "
+        "When provided, uses align_lyrics step instead of transcribe_timed. "
+        "If not provided, looks for lyrics.txt in the run directory. "
+        "Requires lyric-video-aligned pipeline (includes vocal isolation).",
+    )
+    parser.add_argument(
+        "--alignment-model",
+        type=str,
+        default=None,
+        choices=["tiny", "base", "small", "medium", "large"],
+        help="Whisper model size for forced alignment (default: base). "
+        "Larger models are more accurate but slower. "
+        "Requires lyric-video-aligned pipeline.",
+    )
+    parser.add_argument(
+        "--lyric-font-color",
+        type=str,
+        default=None,
+        help="Text color for lyric video (default: white). "
+        "Can be a color name (e.g., 'yellow') or hex code (e.g., '#FFFF00'). "
+        "Requires lyric-video pipeline.",
+    )
+    parser.add_argument(
+        "--lyric-position",
+        type=str,
+        default=None,
+        choices=["top", "center", "bottom"],
+        help="Vertical position for lyrics (default: center). "
+        "Requires lyric-video pipeline.",
+    )
+    parser.add_argument(
+        "--lyric-word-spacing",
+        type=int,
+        default=None,
+        help="Horizontal spacing between words in pixels (default: 20). "
+        "Requires lyric-video pipeline.",
+    )
+    parser.add_argument(
+        "--lyric-background-gradient",
+        type=str,
+        default=None,
+        help="Gradient background for lyric video. Format: 'direction:color1:color2'. "
+        "Directions: vertical, horizontal, radial. "
+        "Examples: 'vertical:purple:black', 'horizontal:blue:cyan'. "
+        "Requires lyric-video pipeline.",
+    )
+    parser.add_argument(
+        "--lyric-background-image",
+        type=Path,
+        default=None,
+        help="Path to background image for lyric video. Image will be scaled/cropped to fit. "
+        "Requires lyric-video pipeline.",
     )
 
 
@@ -353,6 +431,11 @@ def execute(args: Namespace) -> int:
     run_dir = get_run_dir(job.id)
     if not run_dir.exists():
         run_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Configure logging to also write to a file in the run directory
+    log_file = run_dir / "run.log"
+    configure_logging(log_file=log_file)
+    
     logger.info("created run: %s", job.id)
     logger.debug("run directory: %s", run_dir)
 
@@ -371,6 +454,19 @@ def execute(args: Namespace) -> int:
     # Build step config overrides from CLI args
     step_configs = {}
 
+    # Lyrics file for forced alignment
+    if args.lyrics_file:
+        if not args.lyrics_file.exists():
+            logger.error("lyrics file not found: %s", args.lyrics_file)
+            return 1
+        step_configs["align_lyrics"] = {"lyrics_file": str(args.lyrics_file)}
+
+    # Alignment model config
+    if args.alignment_model:
+        align_config = step_configs.get("align_lyrics", {})
+        align_config["model"] = args.alignment_model
+        step_configs["align_lyrics"] = align_config
+
     # Word-level subtitles config
     if args.word_level_subtitles:
         step_configs["transcribe_timed"] = {"generate_word_level": True}
@@ -385,6 +481,45 @@ def execute(args: Namespace) -> int:
         if args.video_size:
             generate_video_config["video_size"] = args.video_size
         step_configs["generate_video"] = generate_video_config
+
+    # Lyric video generation config
+    if any([
+        args.lyric_font_name,
+        args.lyric_font_file,
+        args.lyric_font_size,
+        args.lyric_font_color,
+        args.lyric_position,
+        args.lyric_word_spacing,
+        args.lyric_background_gradient,
+        args.lyric_background_image,
+    ]):
+        lyric_video_config = step_configs.get("generate_lyric_video", {})
+        if args.lyric_font_name:
+            lyric_video_config["font_name"] = args.lyric_font_name
+        if args.lyric_font_file:
+            lyric_video_config["font_file"] = str(args.lyric_font_file)
+        if args.lyric_font_size:
+            lyric_video_config["font_size"] = args.lyric_font_size
+        if args.lyric_font_color:
+            lyric_video_config["font_color"] = args.lyric_font_color
+        if args.lyric_position:
+            lyric_video_config["position"] = args.lyric_position
+        if args.lyric_word_spacing:
+            lyric_video_config["word_spacing"] = args.lyric_word_spacing
+        if args.lyric_background_gradient:
+            lyric_video_config["background_gradient"] = args.lyric_background_gradient
+        if args.lyric_background_image:
+            lyric_video_config["background_image"] = str(args.lyric_background_image)
+        step_configs["generate_lyric_video"] = lyric_video_config
+
+    # Also allow video-size and background-color to apply to lyric-video
+    if args.video_size or args.video_background_color:
+        lyric_video_config = step_configs.get("generate_lyric_video", {})
+        if args.video_size:
+            lyric_video_config["video_size"] = args.video_size
+        if args.video_background_color:
+            lyric_video_config["background_color"] = args.video_background_color
+        step_configs["generate_lyric_video"] = lyric_video_config
 
     # Execute pipeline
     success = run_pipeline(
@@ -453,23 +588,24 @@ def _check_dependencies() -> int:
         print("  Install: brew install tesseract")
 
     # EasyOCR (optional, better quality with GPU support)
-    easyocr_available = False
     try:
-        import easyocr
-        import torch
-        # Check for GPU acceleration
-        has_mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
-        has_cuda = torch.cuda.is_available()
-        gpu_status = ""
-        if has_mps:
-            gpu_status = " (Metal/Apple Silicon GPU)"
-        elif has_cuda:
-            gpu_status = " (CUDA GPU)"
+        import importlib.util
+        if importlib.util.find_spec("easyocr") is not None:
+            import torch
+            # Check for GPU acceleration
+            has_mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+            has_cuda = torch.cuda.is_available()
+            gpu_status = ""
+            if has_mps:
+                gpu_status = " (Metal/Apple Silicon GPU)"
+            elif has_cuda:
+                gpu_status = " (CUDA GPU)"
+            else:
+                gpu_status = " (CPU only)"
+
+            print(f"✓ EasyOCR: available{gpu_status} (optional, better quality)")
         else:
-            gpu_status = " (CPU only)"
-        
-        easyocr_available = True
-        print(f"✓ EasyOCR: available{gpu_status} (optional, better quality)")
+            print("○ EasyOCR: NOT FOUND (optional, for better OCR quality)")
     except ImportError:
         print("○ EasyOCR: NOT FOUND (optional, for better OCR quality)")
         print("  Install: pip install easyocr")

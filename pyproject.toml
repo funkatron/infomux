@@ -5,7 +5,7 @@ description = "A local-first, deterministic media pipeline CLI"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "infomux contributors" }]
+authors = [{ name = "Edward Finkler" }]
 keywords = ["cli", "pipeline", "media", "transcription", "local-first"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -22,7 +22,9 @@ classifiers = [
 ]
 
 # Minimal dependencies - stdlib only for core functionality
-dependencies = []
+dependencies = [
+    "ftfy>=6.0.0", # Fix Unicode encoding issues (mojibake, replacement characters)
+]
 
 [project.optional-dependencies]
 dev = [
@@ -36,12 +38,17 @@ ocr = [
     # pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
     # Or use the Metal-accelerated version for better performance
 ]
+# Note: aeneas (for forced alignment) cannot be included in optional dependencies
+# because it requires numpy to be installed BEFORE building, which breaks dependency resolution.
+# Install manually: uv pip install numpy && uv pip install aeneas
+# System dependencies: ffmpeg, espeak (brew install espeak on macOS)
+# See README for full installation instructions
 
 [project.scripts]
 infomux = "infomux.cli:main"
 
 [project.urls]
-Repository = "https://github.com/your-org/infomux"
+Repository = "https://github.com/funkatron/infomux"
 
 [build-system]
 requires = ["hatchling"]

@@ -12,6 +12,7 @@ import sys
 from typing import TYPE_CHECKING
 
 from infomux import __version__
+from infomux.commands import analyze_timing as analyze_timing_cmd
 from infomux.commands import cleanup as cleanup_cmd
 from infomux.commands import inspect as inspect_cmd
 from infomux.commands import resume as resume_cmd
@@ -69,7 +70,7 @@ Environment Variables:
   INFOMUX_LOG_LEVEL   Log verbosity: DEBUG, INFO, WARN, ERROR
                       (default: INFO)
 
-For more information, see: https://github.com/yourusername/infomux
+For more information, see: https://github.com/funkatron/infomux
 """,
     )
     parser.add_argument(
@@ -259,6 +260,26 @@ Time specifications:
     )
     cleanup_cmd.configure_parser(cleanup_parser)
 
+    # analyze-timing subcommand
+    analyze_parser = subparsers.add_parser(
+        "analyze-timing",
+        help="Analyze timing accuracy of lyric videos",
+        description="Extract frames at word timestamps and analyze audio to verify timing accuracy. "
+        "Useful for debugging timing issues in lyric videos.",
+        epilog="""
+Examples:
+  # Analyze timing for a run
+  infomux analyze-timing run-20260120-220733-0cf45b
+
+  # Extract more sample frames
+  infomux analyze-timing --frames 20 run-20260120-220733-0cf45b
+
+  # Include audio energy analysis
+  infomux analyze-timing --audio-analysis run-20260120-220733-0cf45b
+""",
+    )
+    analyze_timing_cmd.configure_parser(analyze_parser)
+
     return parser
 
 
@@ -301,6 +322,8 @@ def main(argv: list[str] | None = None) -> int:
             return stream_cmd.execute(args)
         elif args.command == "cleanup":
             return cleanup_cmd.execute(args)
+        elif args.command == "analyze-timing":
+            return analyze_timing_cmd.execute(args)
         else:
             # This shouldn't happen due to required=True on subparsers
             parser.print_help(sys.stderr)

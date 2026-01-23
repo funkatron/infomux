@@ -172,20 +172,24 @@ def _discover_steps() -> None:
             module = importlib.import_module(module_name)
 
             # Find the step that was registered from this module
+            # Match by checking if the step class is defined in this module
             for step_info in STEP_REGISTRY.values():
                 if step_info.module is None:
-                    # This step was just registered, update its info
-                    step_info.module = module_name
+                    # Check if this step class is from the current module
+                    step_class_module = step_info.step_class.__module__
+                    if step_class_module == module_name:
+                        # This step was registered from this module, update its info
+                        step_info.module = module_name
 
-                    # Look for run() function
-                    if hasattr(module, "run"):
-                        step_info.run_func = module.run
+                        # Look for run() function
+                        if hasattr(module, "run"):
+                            step_info.run_func = module.run
 
-                    # Look for output filename constant
-                    for attr in dir(module):
-                        if attr.endswith("_FILENAME") and not attr.startswith("_"):
-                            step_info.output_filename = getattr(module, attr)
-                            break
+                        # Look for output filename constant
+                        for attr in dir(module):
+                            if attr.endswith("_FILENAME") and not attr.startswith("_"):
+                                step_info.output_filename = getattr(module, attr)
+                                break
 
         except ImportError as e:
             # Log but don't fail - step just won't be available

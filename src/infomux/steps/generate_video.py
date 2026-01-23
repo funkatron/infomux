@@ -18,6 +18,7 @@ Command:
 
 from __future__ import annotations
 
+import json
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -128,6 +129,16 @@ class GenerateVideoStep:
         if not subtitle_path.exists():
             raise StepError(self.name, f"subtitles not found: {subtitle_path}")
 
+        # Get audio duration to generate video of exact length
+        # Fallback to None if we can't determine duration (will use -shortest)
+        audio_duration = None
+        try:
+            audio_duration = self._get_audio_duration(tools.ffmpeg, audio_path)
+            logger.debug("audio duration: %.2f seconds", audio_duration)
+        except StepError as e:
+            logger.warning("Could not determine audio duration: %s. Using -shortest fallback.", e)
+            # Continue with duration=None, will use -shortest in command
+
         # Output filename
         output_path = output_dir / f"{audio_path.stem}_with_subs.mp4"
 
@@ -138,7 +149,7 @@ class GenerateVideoStep:
         )
 
         cmd = self._build_command(
-            tools.ffmpeg, audio_path, subtitle_path, output_path
+            tools.ffmpeg, audio_path, subtitle_path, output_path, audio_duration
         )
 
         logger.debug("running: %s", " ".join(str(c) for c in cmd))
@@ -175,12 +186,67 @@ class GenerateVideoStep:
         except subprocess.SubprocessError as e:
             raise StepError(self.name, f"subprocess error: {e}")
 
+    def _get_audio_duration(self, ffmpeg: Path, audio_path: Path) -> float:
+        """
+        Get the duration of an audio file using ffprobe.
+
+        Args:
+            ffmpeg: Path to ffmpeg (we use ffprobe which is usually in same dir).
+            audio_path: Path to the audio file.
+
+        Returns:
+            Duration in seconds as a float.
+
+        Raises:
+            StepError: If ffprobe fails or duration cannot be determined.
+        """
+        # Try ffprobe (usually in same directory as ffmpeg)
+        ffprobe = ffmpeg.parent / "ffprobe"
+        if not ffprobe.exists():
+            # Fallback: try ffprobe in PATH
+            ffprobe = Path("ffprobe")
+
+        cmd = [
+            str(ffprobe),
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "json",
+            str(audio_path),
+        ]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            data = json.loads(result.stdout)
+            duration = float(data.get("format", {}).get("duration", 0))
+
+            if duration <= 0:
+                raise StepError(
+                    self.name,
+                    f"Could not determine audio duration from {audio_path}",
+                )
+
+            return duration
+
+        except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, ValueError) as e:
+            # Re-raise as StepError so caller can handle fallback
+            raise StepError(
+                self.name,
+                f"Could not determine audio duration: {e}",
+            )
+
     def _build_command(
         self,
         ffmpeg: Path,
         audio: Path,
         subs: Path,
         output: Path,
+        duration: float | None,
     ) -> list:
         """Build ffmpeg command for video generation."""
         cmd = [str(ffmpeg), "-y"]  # Overwrite output
@@ -197,10 +263,18 @@ class GenerateVideoStep:
             input_count = 2
         else:
             # Use solid color background
-            cmd.extend([
-                "-f", "lavfi",
-                "-i", f"color=c={self.background_color}:s={self.video_size}",
-            ])
+            if duration is not None:
+                # Generate video of the exact audio length
+                cmd.extend([
+                    "-f", "lavfi",
+                    "-i", f"color=c={self.background_color}:s={self.video_size}:d={duration}",
+                ])
+            else:
+                # Fallback: infinite stream, will use -shortest
+                cmd.extend([
+                    "-f", "lavfi",
+                    "-i", f"color=c={self.background_color}:s={self.video_size}",
+                ])
             video_input = "[1:v]"
             input_count = 2
 
@@ -248,7 +322,14 @@ class GenerateVideoStep:
             "-map", "1:v",  # Map video from input 1 (will be filtered with burned-in subs)
             f"-map", f"{subtitle_input_idx}:s",  # Map subtitles from subtitle input (soft subs)
             "-vf", vf,  # Apply video filter (burns in subtitles on video)
-            "-shortest",  # End when shortest input ends (audio)
+        ])
+
+        # Only use -shortest if we couldn't determine duration
+        if duration is None:
+            cmd.append("-shortest")  # End when shortest input ends (audio)
+
+        # Add encoding options
+        cmd.extend([
             "-c:a", "aac",  # Encode audio as AAC for MP4
             "-b:a", "192k",  # Audio bitrate
             "-c:s", "mov_text",  # Subtitle codec for MP4 (soft subtitles - toggleable)

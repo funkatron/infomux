@@ -61,10 +61,14 @@ class StoreJsonStep:
         logger.info("exporting JSON: %s", output_path.name)
 
         try:
+            # Include artifacts from job.json
+            artifacts = run_data.job_json.get("artifacts", [])
+            
             export = {
                 "version": "1.0",
                 "exported_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
                 "run": run_data.to_dict(),
+                "artifacts": artifacts,  # Include all artifacts (video files, etc.)
             }
 
             with open(output_path, "w") as f:

@@ -19,7 +19,9 @@ from __future__ import annotations
 import platform
 import subprocess
 import sys
+import time
 from argparse import ArgumentParser, Namespace
+from pathlib import Path
 
 from infomux.log import get_logger
 from infomux.pipeline_def import get_pipeline, list_pipelines
@@ -42,6 +44,7 @@ def configure_parser(parser: ArgumentParser) -> None:
         nargs="?",
         default=None,
         help="ID of the run to inspect (e.g., run-20260111-020549-c36c19). "
+        "Use 'latest' to inspect the most recent run. "
         "Use 'infomux inspect --list' to see all available run IDs.",
     )
     parser.add_argument(
@@ -82,6 +85,29 @@ def configure_parser(parser: ArgumentParser) -> None:
         help="Show the absolute path to the run directory. "
         "Useful for scripting or copying paths to other tools.",
     )
+    parser.add_argument(
+        "--log",
+        action="store_true",
+        help="Display the run.log file contents. "
+        "Shows all logging output from the pipeline execution.",
+    )
+    parser.add_argument(
+        "--tail",
+        type=int,
+        nargs="?",
+        const=50,
+        metavar="N",
+        help="Tail the run.log file, showing the last N lines (default: 50). "
+        "Useful for monitoring a running job. "
+        "Use '--tail 0' to follow the log in real-time.",
+    )
+    parser.add_argument(
+        "--follow",
+        "-f",
+        action="store_true",
+        help="Follow the run.log file in real-time (same as --tail 0). "
+        "Press Ctrl+C to stop.",
+    )
 
 
 def execute(args: Namespace) -> int:
@@ -112,6 +138,15 @@ def execute(args: Namespace) -> int:
         return 1
 
     run_id = args.run_id
+    
+    # Handle magic "latest" run ID
+    if run_id == "latest":
+        runs = list_runs()
+        if not runs:
+            logger.error("no runs found")
+            return 1
+        run_id = runs[0]
+        logger.debug("using latest run: %s", run_id)
 
     # Check if run exists
     if not run_exists(run_id):
@@ -126,6 +161,24 @@ def execute(args: Namespace) -> int:
         print(str(run_dir), file=sys.stdout)
         if args.open:
             _open_directory(run_dir)
+        return 0
+
+    # Handle --log, --tail, or --follow flags
+    if args.log or args.tail is not None or args.follow:
+        log_file = run_dir / "run.log"
+        if not log_file.exists():
+            logger.error("log file not found: %s", log_file)
+            return 1
+        
+        if args.follow or (args.tail is not None and args.tail == 0):
+            # Follow mode (like tail -f)
+            _tail_log_file(log_file, follow=True)
+        elif args.tail is not None:
+            # Show last N lines
+            _tail_log_file(log_file, follow=False, lines=args.tail)
+        else:
+            # Show full log
+            _show_log_file(log_file)
         return 0
 
     # Load the job envelope
@@ -208,18 +261,56 @@ def _list_runs(output_json: bool = False) -> int:
                     "interrupted": "⚠",
                 }.get(job.status, "?")
                 
-                # Format date (just date part, not full timestamp)
+                # Format timestamps
                 created_date = job.created_at.split("T")[0] if "T" in job.created_at else job.created_at[:10]
+                
+                # Get precise start/stop times
+                start_time = None
+                stop_time = None
+                if job.created_at:
+                    try:
+                        from datetime import datetime
+                        start_dt = datetime.fromisoformat(job.created_at.replace("Z", "+00:00"))
+                        start_time = start_dt.strftime("%H:%M:%S")
+                    except (ValueError, AttributeError):
+                        pass
+                
+                if job.updated_at and job.status in ("completed", "failed", "interrupted"):
+                    try:
+                        from datetime import datetime
+                        stop_dt = datetime.fromisoformat(job.updated_at.replace("Z", "+00:00"))
+                        stop_time = stop_dt.strftime("%H:%M:%S")
+                    except (ValueError, AttributeError):
+                        pass
                 
                 # Pipeline name
                 pipeline_name = job.config.get("pipeline", "?")
                 
-                # Input file name
+                # Current step (if running)
+                current_step = None
+                process_id = None
+                if job.status == "running":
+                    # Find the currently running step
+                    for step in job.steps:
+                        if step.status == "running":
+                            current_step = step.name
+                            process_id = step.process_id
+                            break
+                
+                # Input file name and type
                 input_name = "?"
+                input_type = "?"
                 if job.input:
                     from pathlib import Path
+                    from urllib.parse import unquote
                     input_path = Path(job.input.path)
-                    input_name = input_path.name
+                    # Decode URL-encoded filenames for better display
+                    input_name = unquote(input_path.name)
+                    # Extract file extension/type
+                    if input_path.suffix:
+                        input_type = input_path.suffix[1:].upper()  # Remove dot, uppercase
+                    else:
+                        input_type = "?"
                     if job.input.original_url:
                         # Show URL for downloaded files
                         from urllib.parse import urlparse
@@ -234,8 +325,13 @@ def _list_runs(output_json: bool = False) -> int:
                     "id": run_id,
                     "status": job.status,
                     "date": created_date,
+                    "start_time": start_time,
+                    "stop_time": stop_time,
                     "pipeline": pipeline_name,
+                    "current_step": current_step,
+                    "process_id": process_id,
                     "input": input_name,
+                    "input_type": input_type,
                     "artifacts": artifact_count,
                 })
             except Exception as e:
@@ -248,48 +344,122 @@ def _list_runs(output_json: bool = False) -> int:
                     "date": "?",
                     "pipeline": "?",
                     "input": "?",
+                    "input_type": "?",
                     "artifacts": 0,
                 })
         
         # Print table
         if rows:
+            # Limit input column width for space efficiency
+            MAX_INPUT_WIDTH = 40
+            
             # Calculate column widths
             max_id_len = max(len(r["id"]) for r in rows)
             max_status_len = max(len(r["status"]) for r in rows)
             max_pipeline_len = max(len(r["pipeline"]) for r in rows)
-            max_input_len = max(len(r["input"]) for r in rows)
+            max_input_len = min(max(len(r["input"]) for r in rows), MAX_INPUT_WIDTH)
+            max_step_len = max(len(r["current_step"] or "") for r in rows)
             
             # Ensure minimum widths for headers
             max_id_len = max(max_id_len, len("Run ID"))
             max_status_len = max(max_status_len, len("Status"))
             max_pipeline_len = max(max_pipeline_len, len("Pipeline"))
             max_input_len = max(max_input_len, len("Input"))
+            max_step_len = max(max_step_len, len("Step"))
             
-            # Header
-            header = (
-                f"{'':2} "
-                f"{'Run ID':<{max_id_len}} "
-                f"{'Status':<{max_status_len}} "
-                f"{'Date':<10} "
-                f"{'Pipeline':<{max_pipeline_len}} "
-                f"{'Input':<{max_input_len}} "
-                f"{'Artifacts':>9}"
-            )
+            # Check if we have running jobs (to conditionally show Step/PID columns)
+            has_running = any(r["status"] == "running" for r in rows)
+            
+            # Build header - include times and step/PID for running jobs
+            header_parts = [
+                f"{'':2}",
+                f"{'Run ID':<{max_id_len}}",
+                f"{'Status':<{max_status_len}}",
+                f"{'Date':<10}",
+            ]
+            
+            # Only show Start/Stop times if we have completed/failed jobs
+            has_finished = any(r["status"] in ("completed", "failed", "interrupted") for r in rows)
+            if has_finished:
+                header_parts.extend([
+                    f"{'Start':<8}",
+                    f"{'Stop':<8}",
+                ])
+            
+            header_parts.append(f"{'Pipeline':<{max_pipeline_len}}")
+            
+            # Add step/PID columns if any running jobs
+            if has_running:
+                header_parts.extend([
+                    f"{'Step':<{max_step_len}}",
+                    f"{'PID':>6}",
+                ])
+            
+            header_parts.extend([
+                f"{'Input':<{max_input_len}}",
+                f"{'Type':<4}",
+                f"{'Artifacts':>9}",
+            ])
+            
+            header = " ".join(header_parts)
             print(header)
             print("-" * len(header))
+            
+            # Helper function to truncate input path intelligently
+            def truncate_input(input_str: str, max_width: int) -> str:
+                """Truncate input path with ellipsis if too long."""
+                if len(input_str) <= max_width:
+                    return input_str
+                # Show beginning and end with ellipsis in middle
+                if max_width < 10:
+                    # Too narrow, just truncate end
+                    return input_str[:max_width-1] + "…"
+                # Show first part and last part
+                prefix_len = (max_width - 3) // 2
+                suffix_len = max_width - prefix_len - 3
+                return input_str[:prefix_len] + "…" + input_str[-suffix_len:]
             
             # Rows
             for row in rows:
                 artifacts_str = str(row["artifacts"]) if row["artifacts"] > 0 else "-"
-                print(
-                    f"{row['icon']:2} "
-                    f"{row['id']:<{max_id_len}} "
-                    f"{row['status']:<{max_status_len}} "
-                    f"{row['date']:<10} "
-                    f"{row['pipeline']:<{max_pipeline_len}} "
-                    f"{row['input']:<{max_input_len}} "
-                    f"{artifacts_str:>9}"
-                )
+                
+                # Truncate input if needed
+                input_display = truncate_input(row["input"], max_input_len)
+                
+                row_parts = [
+                    f"{row['icon']:2}",
+                    f"{row['id']:<{max_id_len}}",
+                    f"{row['status']:<{max_status_len}}",
+                    f"{row['date']:<10}",
+                ]
+                
+                # Only show Start/Stop times if we have finished jobs
+                if has_finished:
+                    start_str = row["start_time"] or "-"
+                    stop_str = row["stop_time"] or "-"
+                    row_parts.extend([
+                        f"{start_str:<8}",
+                        f"{stop_str:<8}",
+                    ])
+                
+                row_parts.append(f"{row['pipeline']:<{max_pipeline_len}}")
+                
+                # Add step/PID for running jobs
+                if has_running:
+                    step_str = row["current_step"] or "-"
+                    pid_str = str(row["process_id"]) if row["process_id"] else "-"
+                    row_parts.extend([
+                        f"{step_str:<{max_step_len}}",
+                        f"{pid_str:>6}",
+                    ])
+                
+                row_parts.extend([
+                    f"{input_display:<{max_input_len}}",
+                    f"{row['input_type']:<4}",
+                    f"{artifacts_str:>9}",
+                ])
+                
+                print(" ".join(row_parts))
             print()
             print(f"Total: {len(rows)} run(s)")
 
@@ -413,3 +583,82 @@ def _print_job_summary(job) -> None:
 
     if job.error:
         print(f"\nError: {job.error}")
+
+
+def _show_log_file(log_file: Path) -> None:
+    """
+    Display the entire contents of a log file.
+
+    Args:
+        log_file: Path to the log file.
+    """
+    try:
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+            print(content, end="")
+    except Exception as e:
+        logger.error("failed to read log file: %s", e)
+
+
+def _tail_log_file(log_file: Path, follow: bool = False, lines: int = 50) -> None:
+    """
+    Display the last N lines of a log file, optionally following for new content.
+
+    Args:
+        log_file: Path to the log file.
+        follow: If True, follow the file like 'tail -f'.
+        lines: Number of lines to show (ignored if follow=True).
+    """
+    try:
+        if follow:
+            # Follow mode: show last 10 lines then follow
+            _show_last_lines(log_file, 10)
+            print("\n--- Following log file (Ctrl+C to stop) ---\n", file=sys.stderr)
+            
+            # Open file and seek to end
+            with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+                # Seek to end
+                f.seek(0, 2)
+                
+                try:
+                    while True:
+                        line = f.readline()
+                        if line:
+                            print(line, end="")
+                        else:
+                            time.sleep(0.1)  # Small delay to avoid busy-waiting
+                except KeyboardInterrupt:
+                    print("\n--- Stopped following ---", file=sys.stderr)
+        else:
+            # Just show last N lines
+            _show_last_lines(log_file, lines)
+    except KeyboardInterrupt:
+        # User interrupted, that's fine
+        pass
+    except Exception as e:
+        logger.error("failed to tail log file: %s", e)
+
+
+def _show_last_lines(log_file: Path, lines: int) -> None:
+    """
+    Show the last N lines of a file.
+
+    Args:
+        log_file: Path to the log file.
+        lines: Number of lines to show.
+    """
+    try:
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            # Read all lines
+            all_lines = f.readlines()
+            
+            # Show last N lines
+            if len(all_lines) <= lines:
+                # File is shorter than requested, show all
+                print("".join(all_lines), end="")
+            else:
+                # Show last N lines with a separator
+                print(f"--- Showing last {lines} lines of {len(all_lines)} total ---\n", file=sys.stderr)
+                print("".join(all_lines[-lines:]), end="")
+    except Exception as e:
+        logger.error("failed to read log file: %s", e)

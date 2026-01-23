@@ -111,7 +111,7 @@ DEFAULT_PIPELINE = PipelineDef(
         ),
         StepDef(
             name="transcribe",
-            input_from="extract_audio",  # Uses audio.wav from previous step
+            input_from="extract_audio",  # Uses audio_full.wav from previous step
         ),
     ],
 )
@@ -285,6 +285,104 @@ WEB_SUMMARIZE_PIPELINE = PipelineDef(
     ],
 )
 
+# Lyric video pipeline: generate video with word-level burned subtitles
+LYRIC_VIDEO_PIPELINE = PipelineDef(
+    name="lyric-video",
+    description="Generate music lyric video with word-level burned subtitles",
+    steps=[
+        StepDef(
+            name="extract_audio",
+            input_from=None,
+        ),
+        StepDef(
+            name="transcribe_timed",
+            input_from="extract_audio",
+            config={"generate_word_level": True},  # Enable word-level timestamps
+        ),
+        StepDef(
+            name="generate_lyric_video",
+            input_from="extract_audio",  # Uses audio.wav
+            config={
+                "background_color": "black",
+                "video_size": "1920x1080",
+                "font_name": "Arial",
+                "font_size": 48,
+                "font_color": "white",
+                "position": "center",
+            },
+        ),
+    ],
+)
+
+# Lyric video pipeline with vocal isolation: isolate vocals directly from input for better quality
+LYRIC_VIDEO_ISOLATED_PIPELINE = PipelineDef(
+    name="lyric-video-vocals",
+    description="Generate lyric video with vocal isolation for improved transcription timing",
+    steps=[
+        StepDef(
+            name="isolate_vocals",
+            input_from=None,  # Isolate vocals directly from original input (better quality)
+            config={"tool": "demucs"},  # Use Demucs for better quality (requires torchcodec)
+        ),
+        StepDef(
+            name="transcribe_timed",
+            input_from="isolate_vocals",  # Use audio_vocals_only.wav for transcription
+            config={"generate_word_level": True},  # Enable word-level timestamps
+        ),
+        StepDef(
+            name="extract_audio",
+            input_from=None,  # Extract audio_full.wav from original input for video generation
+        ),
+        StepDef(
+            name="generate_lyric_video",
+            input_from="extract_audio",  # Use extracted audio for video (with music)
+            config={
+                "background_color": "black",
+                "video_size": "1920x1080",
+                "font_name": "Arial",
+                "font_size": 48,
+                "font_color": "white",
+                "position": "center",
+            },
+        ),
+    ],
+)
+
+# Lyric video pipeline with vocal isolation + official lyrics alignment
+# All lyric videos need vocal isolation for accurate timing
+LYRIC_VIDEO_ALIGNED_ISOLATED_PIPELINE = PipelineDef(
+    name="lyric-video-aligned",
+    description="Generate lyric video with vocal isolation and forced alignment (requires --lyrics-file)",
+    steps=[
+        StepDef(
+            name="isolate_vocals",
+            input_from=None,  # Isolate vocals from original input
+            config={"tool": "demucs"},
+        ),
+        StepDef(
+            name="align_lyrics",
+            input_from="isolate_vocals",  # Align lyrics to audio_vocals_only.wav (better accuracy)
+            config={"language": "eng"},
+        ),
+        StepDef(
+            name="extract_audio",
+            input_from=None,  # Extract audio from original input for video
+        ),
+        StepDef(
+            name="generate_lyric_video",
+            input_from="extract_audio",  # Use extracted audio for video (with music)
+            config={
+                "background_color": "black",
+                "video_size": "1920x1080",
+                "font_name": "Arial",
+                "font_size": 48,
+                "font_color": "white",
+                "position": "center",
+            },
+        ),
+    ],
+)
+
 # Available pipelines
 PIPELINES: dict[str, PipelineDef] = {
     "transcribe": DEFAULT_PIPELINE,
@@ -296,9 +394,12 @@ PIPELINES: dict[str, PipelineDef] = {
     "report-store": REPORT_STORE_PIPELINE,
     "audio-to-video": AUDIO_TO_VIDEO_PIPELINE,
     "web-summarize": WEB_SUMMARIZE_PIPELINE,
+    "lyric-video": LYRIC_VIDEO_PIPELINE,
+    "lyric-video-vocals": LYRIC_VIDEO_ISOLATED_PIPELINE,
+    "lyric-video-aligned": LYRIC_VIDEO_ALIGNED_ISOLATED_PIPELINE,  # Always uses vocal isolation
     # Future pipelines (see docs/FUTURE_PLANS.md):
-    # "image-summarize": Extract text from images (OCR) → summarize
-    # "document-summarize": Extract text from documents (PDF/DOCX/images) → summarize
+    # "image-summarize": Extract text from images (OCR) ? summarize
+    # "document-summarize": Extract text from documents (PDF/DOCX/images) ? summarize
 }
 
 

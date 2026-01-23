@@ -89,7 +89,7 @@ class EmbedSubsStep:
             List containing the path to the output video.
 
         Raises:
-            StepError: If ffmpeg fails or files not found.
+            StepError: If ffmpeg fails or files not found, or if input is audio-only.
         """
         tools = get_tool_paths()
 
@@ -101,6 +101,16 @@ class EmbedSubsStep:
 
         if not subtitle_path.exists():
             raise StepError(self.name, f"subtitles not found: {subtitle_path}")
+
+        # Check if input is audio-only (not a video file)
+        audio_extensions = {".mp3", ".m4a", ".wav", ".flac", ".aac", ".ogg", ".opus"}
+        if video_path.suffix.lower() in audio_extensions:
+            raise StepError(
+                self.name,
+                f"Input file is audio-only ({video_path.suffix}), but embed_subs requires a video file. "
+                f"Use the 'audio-to-video' pipeline instead to generate a video from audio with subtitles: "
+                f"infomux run --pipeline audio-to-video {video_path}"
+            )
 
         # Output filename
         suffix = "_captioned" if not self.burn_in else "_burned"

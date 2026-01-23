@@ -19,10 +19,9 @@ import shutil
 import sys
 from argparse import ArgumentParser, Namespace
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 from infomux.log import get_logger
-from infomux.storage import get_runs_dir, load_job, list_runs
+from infomux.storage import get_runs_dir, load_job
 
 logger = get_logger(__name__)
 

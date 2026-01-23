@@ -70,7 +70,11 @@ class TestGenerateVideoStep:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
 
             with patch("infomux.steps.generate_video.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
+                # First call: ffprobe to get duration, second call: ffmpeg to generate video
+                mock_run.side_effect = [
+                    MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}'),
+                    MagicMock(returncode=0),
+                ]
 
                 output_file = tmp_path / "audio_with_subs.mp4"
                 output_file.write_bytes(b"fake video")
@@ -78,8 +82,8 @@ class TestGenerateVideoStep:
                 step = GenerateVideoStep()
                 outputs = step.execute(audio_file, tmp_path)
 
-                # Verify it used transcript.srt
-                cmd = mock_run.call_args[0][0]
+                # Verify it used transcript.srt (check second call - ffmpeg)
+                cmd = mock_run.call_args_list[1][0][0]
                 assert str(srt_file) in " ".join(str(c) for c in cmd)
 
     def test_solid_color_command(self, tmp_path: Path) -> None:
@@ -93,7 +97,11 @@ class TestGenerateVideoStep:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
 
             with patch("infomux.steps.generate_video.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
+                # First call: ffprobe, second call: ffmpeg
+                mock_run.side_effect = [
+                    MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}'),
+                    MagicMock(returncode=0),
+                ]
 
                 output_file = tmp_path / "audio_with_subs.mp4"
                 output_file.write_bytes(b"fake video")
@@ -101,13 +109,16 @@ class TestGenerateVideoStep:
                 step = GenerateVideoStep(background_color="blue", video_size="1280x720")
                 step.execute(audio_file, tmp_path)
 
-                cmd = mock_run.call_args[0][0]
+                # Get the second call (ffmpeg, not ffprobe)
+                cmd = mock_run.call_args_list[1][0][0]
 
-                # Check for solid color input
+                # Check for solid color input with duration
                 assert "-f" in cmd
                 assert "lavfi" in cmd
-                color_index = cmd.index("color=c=blue:s=1280x720")
-                assert color_index > 0
+                # Color command now includes duration parameter
+                cmd_str = " ".join(str(c) for c in cmd)
+                assert "color=c=blue:s=1280x720" in cmd_str
+                assert ":d=" in cmd_str  # Duration parameter should be present
 
     def test_image_background_command(self, tmp_path: Path) -> None:
         """Builds correct command for image background."""
@@ -122,7 +133,11 @@ class TestGenerateVideoStep:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
 
             with patch("infomux.steps.generate_video.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
+                # First call: ffprobe, second call: ffmpeg
+                mock_run.side_effect = [
+                    MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}'),
+                    MagicMock(returncode=0),
+                ]
 
                 output_file = tmp_path / "audio_with_subs.mp4"
                 output_file.write_bytes(b"fake video")
@@ -130,7 +145,8 @@ class TestGenerateVideoStep:
                 step = GenerateVideoStep(background_image=bg_image)
                 step.execute(audio_file, tmp_path)
 
-                cmd = mock_run.call_args[0][0]
+                # Get the second call (ffmpeg, not ffprobe)
+                cmd = mock_run.call_args_list[1][0][0]
 
                 # Check for image input
                 assert "-loop" in cmd
@@ -148,7 +164,11 @@ class TestGenerateVideoStep:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
 
             with patch("infomux.steps.generate_video.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
+                # First call: ffprobe, second call: ffmpeg
+                mock_run.side_effect = [
+                    MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}'),
+                    MagicMock(returncode=0),
+                ]
 
                 output_file = tmp_path / "my_audio_with_subs.mp4"
                 output_file.write_bytes(b"fake video")
@@ -170,7 +190,11 @@ class TestGenerateVideoStep:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
 
             with patch("infomux.steps.generate_video.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=1, stderr="error")
+                # First call: ffprobe succeeds, second call: ffmpeg fails
+                mock_run.side_effect = [
+                    MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}'),
+                    MagicMock(returncode=1, stderr="error"),
+                ]
 
                 step = GenerateVideoStep()
                 with pytest.raises(StepError) as exc_info:
@@ -189,7 +213,11 @@ class TestGenerateVideoStep:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
 
             with patch("infomux.steps.generate_video.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
+                # First call: ffprobe, second call: ffmpeg
+                mock_run.side_effect = [
+                    MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}'),
+                    MagicMock(returncode=0),
+                ]
 
                 output_file = tmp_path / "audio_with_subs.mp4"
                 output_file.write_bytes(b"fake video")
@@ -199,7 +227,8 @@ class TestGenerateVideoStep:
                 )
                 step.execute(audio_file, tmp_path)
 
-                cmd = mock_run.call_args[0][0]
+                # Get the second call (ffmpeg, not ffprobe)
+                cmd = mock_run.call_args_list[1][0][0]
                 cmd_str = " ".join(str(c) for c in cmd)
 
                 assert "FontSize=24" in cmd_str
@@ -220,7 +249,11 @@ class TestRunFunction:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
 
             with patch("infomux.steps.generate_video.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
+                # First call: ffprobe, second call: ffmpeg
+                mock_run.side_effect = [
+                    MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}'),
+                    MagicMock(returncode=0),
+                ]
 
                 output_file = tmp_path / "audio_with_subs.mp4"
                 output_file.write_bytes(b"fake video")
@@ -246,15 +279,19 @@ class TestRunFunction:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
 
             with patch("infomux.steps.generate_video.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
+                # First call: ffprobe, second call: ffmpeg
+                mock_run.side_effect = [
+                    MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}'),
+                    MagicMock(returncode=0),
+                ]
 
                 output_file = tmp_path / "audio_with_subs.mp4"
                 output_file.write_bytes(b"fake video")
 
                 result = run(audio_file, tmp_path, background_image=str(bg_image))
 
-                # Should use image background
-                cmd = mock_run.call_args[0][0]
+                # Should use image background (check second call - ffmpeg)
+                cmd = mock_run.call_args_list[1][0][0]
                 assert "-loop" in cmd
 
     def test_background_color_parameter(self, tmp_path: Path) -> None:
@@ -268,15 +305,19 @@ class TestRunFunction:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
 
             with patch("infomux.steps.generate_video.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
+                # First call: ffprobe, second call: ffmpeg
+                mock_run.side_effect = [
+                    MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}'),
+                    MagicMock(returncode=0),
+                ]
 
                 output_file = tmp_path / "audio_with_subs.mp4"
                 output_file.write_bytes(b"fake video")
 
                 result = run(audio_file, tmp_path, background_color="blue")
 
-                # Should use blue background
-                cmd = mock_run.call_args[0][0]
+                # Should use blue background (check second call - ffmpeg)
+                cmd = mock_run.call_args_list[1][0][0]
                 assert "color=c=blue" in " ".join(str(c) for c in cmd)
 
     def test_video_size_parameter(self, tmp_path: Path) -> None:
@@ -290,15 +331,19 @@ class TestRunFunction:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
 
             with patch("infomux.steps.generate_video.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
+                # First call: ffprobe, second call: ffmpeg
+                mock_run.side_effect = [
+                    MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}'),
+                    MagicMock(returncode=0),
+                ]
 
                 output_file = tmp_path / "audio_with_subs.mp4"
                 output_file.write_bytes(b"fake video")
 
                 result = run(audio_file, tmp_path, video_size="1280x720")
 
-                # Should use custom size
-                cmd = mock_run.call_args[0][0]
+                # Should use custom size (check second call - ffmpeg)
+                cmd = mock_run.call_args_list[1][0][0]
                 assert "1280x720" in " ".join(str(c) for c in cmd)
 
     def test_captures_error_on_failure(self, tmp_path: Path) -> None:

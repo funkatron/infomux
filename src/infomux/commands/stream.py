@@ -605,12 +605,12 @@ def _find_saved_audio(run_dir: Path) -> Path | None:
     wav_files = sorted(glob.glob("*.wav"), reverse=True)
     if wav_files:
         src = Path(wav_files[0])
-        dest = run_dir / "audio.wav"
+        dest = run_dir / "audio_full.wav"
         src.rename(dest)
         return dest
 
     # Also check run_dir
-    for pattern in ["audio.wav", "output.wav", "*.wav"]:
+    for pattern in ["audio_full.wav", "audio.wav", "output.wav", "*.wav"]:  # Support both old and new names
         matches = list(run_dir.glob(pattern))
         if matches:
             return matches[0]

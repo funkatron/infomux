@@ -29,6 +29,14 @@ infomux run --pipeline caption my-song.mp4
 infomux run --pipeline audio-to-video voice-note.m4a
 # → video with burned-in subtitles (great for sharing!)
 
+# Generate lyric video with word-level burned subtitles (EXPERIMENTAL)
+# Requires: demucs (for vocal isolation) or stable-ts (for forced alignment)
+infomux run --pipeline lyric-video song.mp3
+# → video with each word appearing at its exact timing
+
+# Customize lyric video with gradient background (EXPERIMENTAL)
+infomux run --pipeline lyric-video --lyric-font-name "Iosevka Light" --lyric-background-gradient "vertical:purple:black" song.mp3
+
 # Full analysis: transcript + timestamps + summary + database
 infomux run --pipeline report-store interview.m4a
 # → all outputs + indexed in searchable SQLite
@@ -97,6 +105,39 @@ infomux run your-podcast.mp4
 > ollama pull llama3.1:8b          # Default, 8GB RAM
 > ollama pull qwen2.5:32b-instruct  # Better quality, 20GB RAM
 > ```
+
+---
+
+## Optional Dependencies
+
+**By default, infomux includes only core dependencies.** Many features require additional packages that are **not installed automatically**. This keeps the base install lightweight.
+
+### What's NOT Included by Default
+
+| Feature | Required Package | Install Command | Notes |
+|---------|-----------------|-----------------|-------|
+| **Vocal isolation** (for lyric videos) | `demucs` or `spleeter` | `uv pip install demucs` | Demucs recommended for quality |
+| **Forced alignment** (official lyrics) | `stable-ts` (recommended) or `aeneas` | `uv pip install stable-ts` | stable-ts works on Python 3.12+; aeneas requires Python 3.11 |
+| **Better OCR quality** | `easyocr` | `uv pip install easyocr` | Large download (PyTorch) |
+| **LLM summaries** | `ollama` (system package) | `brew install ollama` | Separate system package |
+
+### Quick Install for All Features
+
+```bash
+# Install all optional Python dependencies
+uv pip install demucs stable-ts easyocr
+
+# For LLM summaries, install Ollama separately
+brew install ollama
+```
+
+**Important Notes:**
+- **demucs**: May require `torchcodec` for some models (usually auto-installed)
+- **aeneas**: Requires Python 3.11 (not compatible with 3.12+), plus `espeak` system package (`brew install espeak`)
+- **easyocr**: Requires PyTorch (auto-installed, but large download ~2GB)
+- **stable-ts**: Works on Python 3.12+, recommended over aeneas
+
+See [Troubleshooting](#troubleshooting) for detailed installation instructions for each feature.
 
 ---
 
@@ -194,6 +235,23 @@ infomux run --pipeline audio-to-video --video-background-color blue --video-size
 # Use custom background image
 infomux run --pipeline audio-to-video --video-background-image ~/Pictures/bg.png audio.m4a
 
+# Generate lyric video with word-level burned subtitles (EXPERIMENTAL)
+# Note: Requires optional dependencies (see Optional Dependencies section)
+infomux run --pipeline lyric-video song.mp3
+
+# Customize lyric video fonts (EXPERIMENTAL)
+infomux run --pipeline lyric-video --lyric-font-size 60 --lyric-font-color yellow --lyric-position top song.mp3
+infomux run --pipeline lyric-video --lyric-font-name "Iosevka Light" --lyric-word-spacing 30 song.mp3
+infomux run --pipeline lyric-video --lyric-font-file ~/Library/Fonts/MyFont.ttf song.mp3
+
+# Lyric video with gradient backgrounds (EXPERIMENTAL)
+infomux run --pipeline lyric-video --lyric-background-gradient "vertical:purple:black" song.mp3
+infomux run --pipeline lyric-video --lyric-background-gradient "horizontal:blue:cyan" song.mp3
+infomux run --pipeline lyric-video --lyric-background-gradient "radial:white:darkblue" song.mp3
+
+# Lyric video with image background (EXPERIMENTAL)
+infomux run --pipeline lyric-video --lyric-background-image ~/Pictures/album-art.jpg song.mp3
+
 # Full analysis with searchable database
 infomux run --pipeline report-store weekly-standup.mp4
 
@@ -209,8 +267,14 @@ infomux run --dry-run my-file.mp4
 # Check that ffmpeg, whisper-cli, and model are installed
 infomux run --check-deps
 
-# Verbose logging (shows debug output)
+# Verbose/debug logging (shows detailed output including subprocess commands)
 infomux -v run my-file.mp4
+
+# Or use environment variable for debug logging
+INFOMUX_LOG_LEVEL=DEBUG infomux run my-file.mp4
+
+# Debug logging is especially useful for troubleshooting lyric videos
+INFOMUX_LOG_LEVEL=DEBUG infomux run --pipeline lyric-video-aligned --lyrics-file lyrics.txt song.mp3
 ```
 
 **Output:** Prints the run directory path to stdout.
@@ -235,8 +299,12 @@ infomux inspect --list-steps
 # View a specific run (tab-complete the run ID)
 infomux inspect run-20260111-020549-c36c19
 
+# Use 'latest' to inspect the most recent run
+infomux inspect latest
+
 # Show the path to a run directory
 infomux inspect --path run-20260111-020549-c36c19
+infomux inspect --path latest  # Latest run
 
 # Open the run directory in Finder (macOS) or file manager
 infomux inspect --open run-20260111-020549-c36c19
@@ -246,6 +314,17 @@ infomux inspect --json run-20260111-020549-c36c19
 
 # Pipe to jq for specific fields
 infomux inspect --json run-XXXXX | jq '.artifacts'
+
+# View run log (full log file)
+infomux inspect --log latest
+
+# Tail log (last 50 lines)
+infomux inspect --tail latest
+
+# Follow log in real-time (great for monitoring running jobs)
+infomux inspect --follow latest
+# or use short form
+infomux inspect -f latest
 ```
 
 **Example output (inspect --list):**
@@ -444,6 +523,9 @@ Stopping: stop word 'stop recording'
 | `caption` | Soft subtitles (toggleable) | extract_audio → transcribe_timed → embed_subs |
 | `caption-burn` | Burned-in subtitles (permanent) | extract_audio → transcribe_timed → embed_subs |
 | `audio-to-video` | Generate video from audio with burned subtitles | extract_audio → transcribe_timed → generate_video |
+| `lyric-video` | **[EXPERIMENTAL]** Generate lyric video with word-level burned subtitles | extract_audio → transcribe_timed → generate_lyric_video |
+| `lyric-video-vocals` | **[EXPERIMENTAL]** Generate lyric video with vocal isolation for improved timing | extract_audio → isolate_vocals → transcribe_timed → generate_lyric_video |
+| `lyric-video-aligned` | **[EXPERIMENTAL]** Forced alignment with official lyrics (requires --lyrics-file) | isolate_vocals → align_lyrics → extract_audio → generate_lyric_video |
 
 ```bash
 # List available pipelines
@@ -458,11 +540,13 @@ infomux inspect --list-steps
 | Step | Input | Output | Tool |
 |------|-------|--------|------|
 | `extract_audio` | media file | `audio.wav` (16kHz mono) | ffmpeg |
+| `isolate_vocals` | `audio.wav` | `audio_vocals.wav` (isolated vocals) | demucs or spleeter |
 | `transcribe` | `audio.wav` | `transcript.txt` | whisper-cli |
 | `transcribe_timed` | `audio.wav` | `transcript.srt`, `.vtt`, `.json` | whisper-cli -dtw |
 | `summarize` | `transcript.txt` | `summary.md` | Ollama (chunked for long input) |
 | `embed_subs` | video + `.srt` | `video_captioned.mp4` | ffmpeg |
 | `generate_video` | audio + `.srt` | `audio_with_subs.mp4` | ffmpeg |
+| `generate_lyric_video` | audio + `transcript.json` | `audio_lyric_video.mp4` | ffmpeg |
 | `store_json` | run directory | `report.json` | (built-in) |
 | `store_markdown` | run directory | `report.md` | (built-in) |
 | `store_sqlite` | run directory | → `infomux.db` | sqlite3 |
@@ -494,6 +578,26 @@ input.m4a → [extract_audio] → audio.wav → [transcribe_timed] → transcrip
                                                                     ↓
                                                           [generate_video] → audio_with_subs.mp4
                                                           (solid color or image background)
+
+# lyric-video pipeline (word-level lyric video) [EXPERIMENTAL]
+input.m4a → [extract_audio] → audio_full.wav → [transcribe_timed] → transcript.json (word-level)
+                                                                        ↓
+                                                              [generate_lyric_video] → audio_full_lyric_video.mp4
+                                                              (each word appears at exact timing, supports gradient/image backgrounds)
+
+# lyric-video-vocals pipeline (with vocal isolation) [EXPERIMENTAL]
+# Requires: demucs or spleeter
+input.m4a → [extract_audio] → audio_full.wav → [isolate_vocals] → audio_vocals_only.wav → [transcribe_timed] → transcript.json
+                                                                                                            ↓
+                                                                                          [generate_lyric_video] → audio_full_lyric_video.mp4
+                                                                                          (uses audio_full.wav for video, audio_vocals_only.wav for timing)
+
+# lyric-video-aligned pipeline (forced alignment with official lyrics) [EXPERIMENTAL]
+# Requires: stable-ts (recommended) or aeneas, plus demucs for vocal isolation
+input.m4a → [isolate_vocals] → audio_vocals_only.wav → [align_lyrics] → transcript.json
+                                                                        ↓
+                                                          [extract_audio] → audio_full.wav → [generate_lyric_video] → audio_full_lyric_video.mp4
+                                                          (aligns official lyrics file to audio for precise timing)
 ```
 
 ### Pipeline Artifacts
@@ -567,6 +671,12 @@ The SQLite database enables:
 ```
 
 > **Note:** The `audio-to-video` pipeline generates a video file from audio with a solid color or image background. Use `--video-background-image`, `--video-background-color`, or `--video-size` to customize the output.
+
+> **Note:** The `lyric-video` pipelines **[EXPERIMENTAL]** support custom fonts and backgrounds:
+> - **Fonts:** `--lyric-font-name`, `--lyric-font-file`, `--lyric-font-size`, `--lyric-font-color`
+> - **Backgrounds:** `--lyric-background-gradient "direction:color1:color2"` (directions: vertical, horizontal, radial) or `--lyric-background-image path/to/image.jpg`
+> - **Layout:** `--lyric-position` (top, center, bottom), `--lyric-word-spacing`
+> - **Requirements:** See [Optional Dependencies](#optional-dependencies) for required packages
 
 ---
 
@@ -643,7 +753,7 @@ Every run produces a complete execution record:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `INFOMUX_DATA_DIR` | Base directory for runs and models | `~/.local/share/infomux` |
-| `INFOMUX_LOG_LEVEL` | Log verbosity: `DEBUG`, `INFO`, `WARN`, `ERROR` | `INFO` |
+| `INFOMUX_LOG_LEVEL` | Log verbosity: `DEBUG`, `INFO`, `WARN`, `ERROR`. Use `DEBUG` for detailed debugging output including subprocess commands and FFmpeg output. | `INFO` |
 | `INFOMUX_WHISPER_MODEL` | Path to GGML whisper model file | `$INFOMUX_DATA_DIR/models/whisper/ggml-base.en.bin` |
 | `INFOMUX_FFMPEG_PATH` | Override ffmpeg binary location | *(auto-detected from PATH)* |
 | `INFOMUX_WHISPER_CLI_PATH` | Override whisper-cli binary location | *(auto-detected from PATH)* |
@@ -771,6 +881,73 @@ infomux stream --list-devices
 
 On macOS, you may need to grant Terminal/your IDE microphone access in System Preferences → Privacy & Security → Microphone.
 
+### Lyric Video Features (EXPERIMENTAL)
+
+**⚠️ These features are experimental and require additional dependencies not included by default.**
+
+#### Vocal Isolation
+
+The `lyric-video-vocals` and `lyric-video-aligned` pipelines require vocal isolation:
+
+```bash
+# Install Demucs (recommended for better quality)
+uv pip install demucs
+
+# Or install Spleeter (faster but lower quality)
+uv pip install spleeter
+```
+
+**Note:** Demucs may require `torchcodec` for some models. If you see errors, try:
+```bash
+uv pip install torchcodec
+```
+
+Then use the `lyric-video-vocals` pipeline:
+
+```bash
+uv run infomux run --pipeline lyric-video-vocals <your-audio-file>
+```
+
+#### Forced Alignment (Official Lyrics)
+
+The `lyric-video-aligned` pipeline aligns official lyrics to audio for precise word-level timing.
+**Requires:** Vocal isolation (demucs/spleeter) + alignment backend (stable-ts or aeneas)
+
+Two backends are supported:
+
+**Option 1: stable-ts (recommended, Python 3.12+)**
+
+Uses Whisper for alignment. Simple installation, works on modern Python:
+
+```bash
+uv pip install stable-ts
+```
+
+**Option 2: aeneas (legacy, Python 3.11 only)**
+
+Traditional forced alignment. Requires Python 3.11 due to numpy.distutils removal in Python 3.12:
+
+```bash
+# Create a Python 3.11 environment
+uv venv --python 3.11 .venv311
+source .venv311/bin/activate
+
+# Install aeneas
+uv pip install numpy aeneas
+
+# (Optional) Install espeak for better TTS on Linux
+# sudo apt-get install espeak
+```
+
+**Note:** aeneas cannot be installed on Python 3.12+ because it requires `numpy.distutils` which was removed.
+The `align_lyrics` step auto-detects which backend is available and uses stable-ts by default.
+
+Then use the `lyric-video-aligned` pipeline with a lyrics file:
+
+```bash
+uv run infomux run --pipeline lyric-video-aligned --lyrics-file lyrics.txt <your-audio-file>
+```
+
 ---
 
 ## Project Structure
@@ -826,6 +1003,7 @@ src/infomux/
 
 **Steps:**
 - `extract_audio` — ffmpeg → 16kHz mono WAV
+- `isolate_vocals` — demucs/spleeter → isolated vocal track (optional, improves timing)
 - `transcribe` — whisper-cli → transcript.txt
 - `transcribe_timed` — whisper-cli -dtw → .srt/.vtt/.json
 - `summarize` — Ollama with chunking, content hints, `--model` override
@@ -838,6 +1016,9 @@ src/infomux/
 **Pipelines:**
 - `transcribe`, `summarize`, `timed`, `report`, `report-store`
 - `caption`, `caption-burn` — video subtitle embedding
+- `lyric-video`, `lyric-video-vocals`, `lyric-video-aligned` — **[EXPERIMENTAL]** word-level lyric videos
+  - Requires: `demucs` (for vocal isolation) and/or `stable-ts` (for forced alignment)
+  - See [Optional Dependencies](#optional-dependencies) for installation
 
 **Streaming:**
 - Real-time audio capture and transcription
