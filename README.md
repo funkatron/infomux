@@ -267,8 +267,14 @@ infomux run --dry-run my-file.mp4
 # Check that ffmpeg, whisper-cli, and model are installed
 infomux run --check-deps
 
-# Verbose logging (shows debug output)
+# Verbose/debug logging (shows detailed output including subprocess commands)
 infomux -v run my-file.mp4
+
+# Or use environment variable for debug logging
+INFOMUX_LOG_LEVEL=DEBUG infomux run my-file.mp4
+
+# Debug logging is especially useful for troubleshooting lyric videos
+INFOMUX_LOG_LEVEL=DEBUG infomux run --pipeline lyric-video-aligned --lyrics-file lyrics.txt song.mp3
 ```
 
 **Output:** Prints the run directory path to stdout.
@@ -747,7 +753,7 @@ Every run produces a complete execution record:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `INFOMUX_DATA_DIR` | Base directory for runs and models | `~/.local/share/infomux` |
-| `INFOMUX_LOG_LEVEL` | Log verbosity: `DEBUG`, `INFO`, `WARN`, `ERROR` | `INFO` |
+| `INFOMUX_LOG_LEVEL` | Log verbosity: `DEBUG`, `INFO`, `WARN`, `ERROR`. Use `DEBUG` for detailed debugging output including subprocess commands and FFmpeg output. | `INFO` |
 | `INFOMUX_WHISPER_MODEL` | Path to GGML whisper model file | `$INFOMUX_DATA_DIR/models/whisper/ggml-base.en.bin` |
 | `INFOMUX_FFMPEG_PATH` | Override ffmpeg binary location | *(auto-detected from PATH)* |
 | `INFOMUX_WHISPER_CLI_PATH` | Override whisper-cli binary location | *(auto-detected from PATH)* |
