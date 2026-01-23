@@ -902,6 +902,7 @@ class GenerateLyricVideoStep:
             cmd = [
                 str(ffmpeg),
                 "-y",
+                "-loglevel", "warning",  # Show warnings and errors, suppress info/stats
                 "-f", "lavfi",
                 "-i", f"color=c=black@0:s={word_width}x{word_height}:d=0.1",  # Transparent background (alpha=0)
                 "-vf", drawtext_filter,
@@ -968,7 +969,12 @@ class GenerateLyricVideoStep:
         Returns:
             List of command arguments.
         """
-        cmd = [str(ffmpeg), "-y"]  # Overwrite output
+        cmd = [
+            str(ffmpeg),
+            "-y",  # Overwrite output
+            "-loglevel", "warning",  # Show warnings and errors, suppress info/stats
+            "-nostats",  # Don't print encoding statistics (prevents broken pipe errors)
+        ]
 
         # Add audio input
         cmd.extend(["-i", str(audio)])
@@ -1251,7 +1257,12 @@ class GenerateLyricVideoStep:
         Returns:
             List of command arguments.
         """
-        cmd = [str(ffmpeg), "-y"]  # Overwrite output
+        cmd = [
+            str(ffmpeg),
+            "-y",  # Overwrite output
+            "-loglevel", "warning",  # Show warnings and errors, suppress info/stats
+            "-nostats",  # Don't print encoding statistics (prevents broken pipe errors)
+        ]
 
         # Add audio input
         cmd.extend(["-i", str(audio)])
