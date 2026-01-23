@@ -19,7 +19,9 @@ from __future__ import annotations
 import platform
 import subprocess
 import sys
+import time
 from argparse import ArgumentParser, Namespace
+from pathlib import Path
 
 from infomux.log import get_logger
 from infomux.pipeline_def import get_pipeline, list_pipelines
@@ -82,6 +84,22 @@ def configure_parser(parser: ArgumentParser) -> None:
         help="Show the absolute path to the run directory. "
         "Useful for scripting or copying paths to other tools.",
     )
+    parser.add_argument(
+        "--log",
+        action="store_true",
+        help="Display the run.log file contents. "
+        "Shows all logging output from the pipeline execution.",
+    )
+    parser.add_argument(
+        "--tail",
+        type=int,
+        nargs="?",
+        const=50,
+        metavar="N",
+        help="Tail the run.log file, showing the last N lines (default: 50). "
+        "Useful for monitoring a running job. "
+        "Use '--tail 0' to follow the log in real-time.",
+    )
 
 
 def execute(args: Namespace) -> int:
@@ -126,6 +144,25 @@ def execute(args: Namespace) -> int:
         print(str(run_dir), file=sys.stdout)
         if args.open:
             _open_directory(run_dir)
+        return 0
+
+    # Handle --log or --tail flags
+    if args.log or args.tail is not None:
+        log_file = run_dir / "run.log"
+        if not log_file.exists():
+            logger.error("log file not found: %s", log_file)
+            return 1
+        
+        if args.tail is not None:
+            if args.tail == 0:
+                # Follow mode (like tail -f)
+                _tail_log_file(log_file, follow=True)
+            else:
+                # Show last N lines
+                _tail_log_file(log_file, follow=False, lines=args.tail)
+        else:
+            # Show full log
+            _show_log_file(log_file)
         return 0
 
     # Load the job envelope
@@ -530,3 +567,82 @@ def _print_job_summary(job) -> None:
 
     if job.error:
         print(f"\nError: {job.error}")
+
+
+def _show_log_file(log_file: Path) -> None:
+    """
+    Display the entire contents of a log file.
+
+    Args:
+        log_file: Path to the log file.
+    """
+    try:
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+            print(content, end="")
+    except Exception as e:
+        logger.error("failed to read log file: %s", e)
+
+
+def _tail_log_file(log_file: Path, follow: bool = False, lines: int = 50) -> None:
+    """
+    Display the last N lines of a log file, optionally following for new content.
+
+    Args:
+        log_file: Path to the log file.
+        follow: If True, follow the file like 'tail -f'.
+        lines: Number of lines to show (ignored if follow=True).
+    """
+    try:
+        if follow:
+            # Follow mode: show last 10 lines then follow
+            _show_last_lines(log_file, 10)
+            print("\n--- Following log file (Ctrl+C to stop) ---\n", file=sys.stderr)
+            
+            # Open file and seek to end
+            with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+                # Seek to end
+                f.seek(0, 2)
+                
+                try:
+                    while True:
+                        line = f.readline()
+                        if line:
+                            print(line, end="")
+                        else:
+                            time.sleep(0.1)  # Small delay to avoid busy-waiting
+                except KeyboardInterrupt:
+                    print("\n--- Stopped following ---", file=sys.stderr)
+        else:
+            # Just show last N lines
+            _show_last_lines(log_file, lines)
+    except KeyboardInterrupt:
+        # User interrupted, that's fine
+        pass
+    except Exception as e:
+        logger.error("failed to tail log file: %s", e)
+
+
+def _show_last_lines(log_file: Path, lines: int) -> None:
+    """
+    Show the last N lines of a file.
+
+    Args:
+        log_file: Path to the log file.
+        lines: Number of lines to show.
+    """
+    try:
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            # Read all lines
+            all_lines = f.readlines()
+            
+            # Show last N lines
+            if len(all_lines) <= lines:
+                # File is shorter than requested, show all
+                print("".join(all_lines), end="")
+            else:
+                # Show last N lines with a separator
+                print(f"--- Showing last {lines} lines of {len(all_lines)} total ---\n", file=sys.stderr)
+                print("".join(all_lines[-lines:]), end="")
+    except Exception as e:
+        logger.error("failed to read log file: %s", e)
