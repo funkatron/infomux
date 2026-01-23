@@ -66,7 +66,9 @@ class GenerateLyricVideoStep:
     """
 
     name: str = "generate_lyric_video"
-    background_color: str = "black"  # Background color
+    background_color: str = "black"  # Background color (solid color, or gradient like "gradient:purple:black")
+    background_image: Path | None = None  # Optional background image (scaled to fit)
+    background_gradient: str | None = None  # Gradient spec: "vertical:color1:color2" or "horizontal:color1:color2"
     video_size: str = "1920x1080"  # Width x Height
     font_name: str = "Arial"  # Font family name
     font_file: Path | None = None  # Optional explicit font file path
@@ -744,6 +746,99 @@ class GenerateLyricVideoStep:
         text = text.replace("]", "\\]")
         return text
 
+    def _get_background_input(
+        self,
+        ffmpeg: Path,
+        duration: float | None,
+        output_dir: Path,
+    ) -> tuple[list[str], str]:
+        """
+        Get the ffmpeg input arguments for the background.
+
+        Supports:
+        - Solid color: "black", "#FF0000", etc.
+        - Gradient: "vertical:purple:black" or "horizontal:blue:cyan"
+        - Image: Path to an image file (scaled/cropped to fit)
+
+        Args:
+            ffmpeg: Path to ffmpeg executable.
+            duration: Duration in seconds (None if unknown).
+            output_dir: Directory for temporary files.
+
+        Returns:
+            Tuple of (input_args, filter_prefix) where:
+            - input_args: List of ffmpeg arguments to add before filter
+            - filter_prefix: Filter to apply to background (may be empty)
+        """
+        width, height = map(int, self.video_size.split("x"))
+        duration_str = f":d={duration}" if duration else ""
+
+        # Priority: background_image > background_gradient > background_color
+        if self.background_image and Path(self.background_image).exists():
+            # Use image as background (loop it to match audio duration)
+            img_path = Path(self.background_image)
+            logger.info("using background image: %s", img_path.name)
+            
+            # Loop image and scale/crop to fit video size
+            input_args = ["-loop", "1", "-i", str(img_path)]
+            # Scale to cover, then crop to exact size
+            filter_prefix = f"[1:v]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}[bg];"
+            return input_args, filter_prefix
+
+        elif self.background_gradient:
+            # Parse gradient spec: "direction:color1:color2"
+            # direction: vertical, horizontal, radial
+            parts = self.background_gradient.split(":")
+            if len(parts) >= 3:
+                direction = parts[0].lower()
+                color1 = parts[1]
+                color2 = parts[2]
+            elif len(parts) == 2:
+                direction = "vertical"
+                color1 = parts[0]
+                color2 = parts[1]
+            else:
+                logger.warning("invalid gradient spec, using solid color")
+                direction = None
+
+            if direction:
+                logger.info("using %s gradient: %s -> %s", direction, color1, color2)
+                
+                # Generate gradient using geq filter
+                # For vertical gradient: darker at top, lighter at bottom
+                if direction == "vertical":
+                    # Create gradient using gradients filter (FFmpeg 5.0+)
+                    # Fallback: use geq for older ffmpeg
+                    gradient_filter = (
+                        f"gradients=s={width}x{height}:c0={color1}:c1={color2}:"
+                        f"x0=0:y0=0:x1=0:y1={height}{duration_str}"
+                    )
+                elif direction == "horizontal":
+                    gradient_filter = (
+                        f"gradients=s={width}x{height}:c0={color1}:c1={color2}:"
+                        f"x0=0:y0=0:x1={width}:y1=0{duration_str}"
+                    )
+                elif direction == "radial":
+                    # Radial gradient from center
+                    gradient_filter = (
+                        f"gradients=s={width}x{height}:c0={color1}:c1={color2}:"
+                        f"x0={width//2}:y0={height//2}:x1=0:y1=0:type=radial{duration_str}"
+                    )
+                else:
+                    # Default to vertical
+                    gradient_filter = (
+                        f"gradients=s={width}x{height}:c0={color1}:c1={color2}:"
+                        f"x0=0:y0=0:x1=0:y1={height}{duration_str}"
+                    )
+                
+                input_args = ["-f", "lavfi", "-i", gradient_filter]
+                return input_args, ""
+
+        # Default: solid color
+        color_filter = f"color=c={self.background_color}:s={self.video_size}{duration_str}"
+        input_args = ["-f", "lavfi", "-i", color_filter]
+        return input_args, ""
+
     def _generate_word_images(
         self,
         ffmpeg: Path,
@@ -878,25 +973,11 @@ class GenerateLyricVideoStep:
         # Add audio input
         cmd.extend(["-i", str(audio)])
 
-        # Add solid color background
-        if duration is not None:
-            cmd.extend(
-                [
-                    "-f",
-                    "lavfi",
-                    "-i",
-                    f"color=c={self.background_color}:s={self.video_size}:d={duration}",
-                ]
-            )
-        else:
-            cmd.extend(
-                [
-                    "-f",
-                    "lavfi",
-                    "-i",
-                    f"color=c={self.background_color}:s={self.video_size}",
-                ]
-            )
+        # Add background (solid color, gradient, or image)
+        bg_input_args, bg_filter_prefix = self._get_background_input(
+            ffmpeg, duration, output.parent
+        )
+        cmd.extend(bg_input_args)
 
         # Add all word images as inputs
         input_idx = 2  # Start after audio (0) and background (1)
@@ -929,7 +1010,13 @@ class GenerateLyricVideoStep:
         # Build overlay filter chain
         # Start with background video
         filter_chains = []
-        current_input = "[1:v]"
+        
+        # Add background filter prefix if needed (for image backgrounds)
+        if bg_filter_prefix:
+            filter_chains.append(bg_filter_prefix.rstrip(";"))
+            current_input = "[bg]"
+        else:
+            current_input = "[1:v]"
         
         # Overlay each word image at the right time and position
         for i, (pw, img_path) in enumerate(word_image_paths):
@@ -1336,6 +1423,8 @@ def run(
     input_path: Path,
     output_dir: Path,
     background_color: str = "black",
+    background_image: str | Path | None = None,
+    background_gradient: str | None = None,
     video_size: str = "1920x1080",
     font_name: str = "Arial",
     font_file: str | Path | None = None,
@@ -1352,6 +1441,8 @@ def run(
         input_path: Path to audio file.
         output_dir: Directory for output (must contain transcript.json).
         background_color: Background color (default: "black").
+        background_image: Optional path to background image.
+        background_gradient: Optional gradient spec (e.g., "vertical:purple:black").
         video_size: Video dimensions as "WxH" (default: "1920x1080").
         font_name: Font family name (default: "Arial").
         font_file: Optional explicit font file path.
@@ -1368,8 +1459,14 @@ def run(
     if font_file:
         font_file_path = Path(font_file) if isinstance(font_file, str) else font_file
 
+    bg_image_path = None
+    if background_image:
+        bg_image_path = Path(background_image) if isinstance(background_image, str) else background_image
+
     step = GenerateLyricVideoStep(
         background_color=background_color,
+        background_image=bg_image_path,
+        background_gradient=background_gradient,
         video_size=video_size,
         font_name=font_name,
         font_file=font_file_path,

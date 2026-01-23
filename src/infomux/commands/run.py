@@ -238,6 +238,22 @@ def configure_parser(parser: ArgumentParser) -> None:
         help="Horizontal spacing between words in pixels (default: 20). "
         "Requires lyric-video pipeline.",
     )
+    parser.add_argument(
+        "--lyric-background-gradient",
+        type=str,
+        default=None,
+        help="Gradient background for lyric video. Format: 'direction:color1:color2'. "
+        "Directions: vertical, horizontal, radial. "
+        "Examples: 'vertical:purple:black', 'horizontal:blue:cyan'. "
+        "Requires lyric-video pipeline.",
+    )
+    parser.add_argument(
+        "--lyric-background-image",
+        type=Path,
+        default=None,
+        help="Path to background image for lyric video. Image will be scaled/cropped to fit. "
+        "Requires lyric-video pipeline.",
+    )
 
 
 def execute(args: Namespace) -> int:
@@ -454,6 +470,8 @@ def execute(args: Namespace) -> int:
         args.lyric_font_color,
         args.lyric_position,
         args.lyric_word_spacing,
+        args.lyric_background_gradient,
+        args.lyric_background_image,
     ]):
         lyric_video_config = step_configs.get("generate_lyric_video", {})
         if args.lyric_font_name:
@@ -468,6 +486,10 @@ def execute(args: Namespace) -> int:
             lyric_video_config["position"] = args.lyric_position
         if args.lyric_word_spacing:
             lyric_video_config["word_spacing"] = args.lyric_word_spacing
+        if args.lyric_background_gradient:
+            lyric_video_config["background_gradient"] = args.lyric_background_gradient
+        if args.lyric_background_image:
+            lyric_video_config["background_image"] = str(args.lyric_background_image)
         step_configs["generate_lyric_video"] = lyric_video_config
 
     # Also allow video-size and background-color to apply to lyric-video
