@@ -33,8 +33,8 @@ infomux run --pipeline audio-to-video voice-note.m4a
 infomux run --pipeline lyric-video song.mp3
 # → video with each word appearing at its exact timing
 
-# Customize lyric video appearance
-infomux run --pipeline lyric-video --lyric-font-size 60 --lyric-font-color yellow --lyric-position top song.mp3
+# Customize lyric video with gradient background
+infomux run --pipeline lyric-video --lyric-font-name "Iosevka Light" --lyric-background-gradient "vertical:purple:black" song.mp3
 
 # Full analysis: transcript + timestamps + summary + database
 infomux run --pipeline report-store interview.m4a
@@ -204,9 +204,18 @@ infomux run --pipeline audio-to-video --video-background-image ~/Pictures/bg.png
 # Generate lyric video with word-level burned subtitles
 infomux run --pipeline lyric-video song.mp3
 
-# Customize lyric video appearance
+# Customize lyric video fonts
 infomux run --pipeline lyric-video --lyric-font-size 60 --lyric-font-color yellow --lyric-position top song.mp3
-infomux run --pipeline lyric-video --lyric-font-name "Helvetica" --lyric-word-spacing 30 song.mp3
+infomux run --pipeline lyric-video --lyric-font-name "Iosevka Light" --lyric-word-spacing 30 song.mp3
+infomux run --pipeline lyric-video --lyric-font-file ~/Library/Fonts/MyFont.ttf song.mp3
+
+# Lyric video with gradient backgrounds
+infomux run --pipeline lyric-video --lyric-background-gradient "vertical:purple:black" song.mp3
+infomux run --pipeline lyric-video --lyric-background-gradient "horizontal:blue:cyan" song.mp3
+infomux run --pipeline lyric-video --lyric-background-gradient "radial:white:darkblue" song.mp3
+
+# Lyric video with image background
+infomux run --pipeline lyric-video --lyric-background-image ~/Pictures/album-art.jpg song.mp3
 
 # Full analysis with searchable database
 infomux run --pipeline report-store weekly-standup.mp4
@@ -517,7 +526,7 @@ input.m4a → [extract_audio] → audio.wav → [transcribe_timed] → transcrip
 input.m4a → [extract_audio] → audio.wav → [transcribe_timed] → transcript.json (word-level)
                                                                     ↓
                                                           [generate_lyric_video] → audio_lyric_video.mp4
-                                                          (each word appears at exact timing)
+                                                          (each word appears at exact timing, supports gradient/image backgrounds)
 
 # lyric-video-isolated pipeline (with vocal isolation for better timing)
 input.m4a → [extract_audio] → audio.wav → [isolate_vocals] → audio_vocals.wav → [transcribe_timed] → transcript.json
@@ -597,6 +606,11 @@ The SQLite database enables:
 ```
 
 > **Note:** The `audio-to-video` pipeline generates a video file from audio with a solid color or image background. Use `--video-background-image`, `--video-background-color`, or `--video-size` to customize the output.
+
+> **Note:** The `lyric-video` pipelines support custom fonts and backgrounds:
+> - **Fonts:** `--lyric-font-name`, `--lyric-font-file`, `--lyric-font-size`, `--lyric-font-color`
+> - **Backgrounds:** `--lyric-background-gradient "direction:color1:color2"` (directions: vertical, horizontal, radial) or `--lyric-background-image path/to/image.jpg`
+> - **Layout:** `--lyric-position` (top, center, bottom), `--lyric-word-spacing`
 
 ---
 
