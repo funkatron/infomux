@@ -44,6 +44,7 @@ def configure_parser(parser: ArgumentParser) -> None:
         nargs="?",
         default=None,
         help="ID of the run to inspect (e.g., run-20260111-020549-c36c19). "
+        "Use 'latest' to inspect the most recent run. "
         "Use 'infomux inspect --list' to see all available run IDs.",
     )
     parser.add_argument(
@@ -137,6 +138,15 @@ def execute(args: Namespace) -> int:
         return 1
 
     run_id = args.run_id
+    
+    # Handle magic "latest" run ID
+    if run_id == "latest":
+        runs = list_runs()
+        if not runs:
+            logger.error("no runs found")
+            return 1
+        run_id = runs[0]
+        logger.debug("using latest run: %s", run_id)
 
     # Check if run exists
     if not run_exists(run_id):
