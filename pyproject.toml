@@ -5,7 +5,7 @@ description = "A local-first, deterministic media pipeline CLI"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "infomux contributors" }]
+authors = [{ name = "Edward Finkler" }]
 keywords = ["cli", "pipeline", "media", "transcription", "local-first"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -48,7 +48,7 @@ ocr = [
 infomux = "infomux.cli:main"
 
 [project.urls]
-Repository = "https://github.com/your-org/infomux"
+Repository = "https://github.com/funkatron/infomux"
 
 [build-system]
 requires = ["hatchling"]

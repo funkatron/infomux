@@ -70,7 +70,7 @@ Environment Variables:
   INFOMUX_LOG_LEVEL   Log verbosity: DEBUG, INFO, WARN, ERROR
                       (default: INFO)
 
-For more information, see: https://github.com/yourusername/infomux
+For more information, see: https://github.com/funkatron/infomux
 """,
     )
     parser.add_argument(
