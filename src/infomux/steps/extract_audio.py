@@ -67,6 +67,12 @@ class ExtractAudioStep:
 
         output_path = output_dir / AUDIO_FILENAME
 
+        # Skip extraction if audio already exists (e.g., from isolate_vocals)
+        if output_path.exists():
+            size = output_path.stat().st_size
+            logger.info("audio already exists: %s (%d bytes), skipping extraction", output_path.name, size)
+            return [output_path]
+
         logger.info("extracting audio: %s -> %s", input_path.name, output_path.name)
 
         # Build ffmpeg command

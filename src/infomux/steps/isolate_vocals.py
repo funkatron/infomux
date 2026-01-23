@@ -63,14 +63,61 @@ class IsolateVocalsStep:
             StepError: If tool is not found or isolation fails.
         """
         if self.tool == "demucs":
-            return self._isolate_with_demucs(input_path, output_dir)
+            result = self._isolate_with_demucs(input_path, output_dir)
         elif self.tool == "spleeter":
-            return self._isolate_with_spleeter(input_path, output_dir)
+            result = self._isolate_with_spleeter(input_path, output_dir)
         else:
             raise StepError(
                 self.name,
                 f"Unknown tool: {self.tool}. Use 'demucs' or 'spleeter'.",
             )
+        
+        # Also extract full audio if it doesn't exist (avoids re-extracting later)
+        self._extract_full_audio_if_needed(input_path, output_dir)
+        
+        return result
+    
+    def _extract_full_audio_if_needed(self, input_path: Path, output_dir: Path) -> None:
+        """
+        Extract full audio as a side effect if it doesn't already exist.
+        This avoids re-extracting the same file later in the pipeline.
+        
+        Args:
+            input_path: Path to the input audio file.
+            output_dir: Directory to write the extracted audio.
+        """
+        audio_output = output_dir / "audio.wav"
+        if audio_output.exists():
+            return  # Already exists, skip
+        
+        tools = get_tool_paths()
+        if not tools.ffmpeg:
+            return  # Can't extract without ffmpeg
+        
+        logger.debug("extracting full audio as side effect: %s", audio_output.name)
+        extract_cmd = [
+            str(tools.ffmpeg),
+            "-y",
+            "-i",
+            str(input_path),
+            "-vn",  # No video
+            "-ac",
+            "1",  # Mono
+            "-ar",
+            "16000",  # 16kHz
+            "-c:a",
+            "pcm_s16le",  # 16-bit PCM
+            str(audio_output),
+        ]
+        extract_result = subprocess.run(
+            extract_cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if extract_result.returncode == 0 and audio_output.exists():
+            logger.debug("extracted full audio: %s", audio_output.name)
+        # Don't fail if extraction fails - it's just a side effect
 
     def _isolate_with_demucs(self, input_path: Path, output_dir: Path) -> list[Path]:
         """Isolate vocals using Demucs."""
