@@ -44,6 +44,7 @@ class TestExtractAudioStep:
         """Builds correct ffmpeg command with expected flags."""
         input_file = tmp_path / "input.mp4"
         input_file.touch()
+        output_file = tmp_path / AUDIO_FILENAME
 
         with patch("infomux.steps.extract_audio.get_tool_paths") as mock_tools:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
@@ -51,10 +52,12 @@ class TestExtractAudioStep:
             with patch("infomux.steps.extract_audio.subprocess.run") as mock_run:
                 # Simulate successful ffmpeg run
                 mock_run.return_value = MagicMock(returncode=0)
-
-                # Create expected output file
-                output_file = tmp_path / AUDIO_FILENAME
-                output_file.write_bytes(b"fake wav data")
+                
+                # Create output file after subprocess.run (simulate ffmpeg creating it)
+                def create_output(*args, **kwargs):
+                    output_file.write_bytes(b"fake wav data")
+                    return MagicMock(returncode=0)
+                mock_run.side_effect = create_output
 
                 step = ExtractAudioStep()
                 step.execute(input_file, tmp_path)
@@ -71,6 +74,29 @@ class TestExtractAudioStep:
                 assert "-ac" in cmd and "1" in cmd  # Mono
                 assert "-ar" in cmd and "16000" in cmd  # 16kHz
                 assert "pcm_s16le" in cmd  # PCM format
+    
+    def test_skips_extraction_if_already_exists(self, tmp_path: Path) -> None:
+        """Skips extraction if audio.wav already exists."""
+        input_file = tmp_path / "input.mp4"
+        input_file.touch()
+        
+        # Create output file before extraction
+        output_file = tmp_path / AUDIO_FILENAME
+        output_file.write_bytes(b"existing audio data")
+
+        with patch("infomux.steps.extract_audio.get_tool_paths") as mock_tools:
+            mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
+
+            with patch("infomux.steps.extract_audio.subprocess.run") as mock_run:
+                step = ExtractAudioStep()
+                outputs = step.execute(input_file, tmp_path)
+
+                # Should not call ffmpeg
+                mock_run.assert_not_called()
+                
+                # Should return existing file
+                assert len(outputs) == 1
+                assert outputs[0] == output_file
 
     def test_raises_on_ffmpeg_failure(self, tmp_path: Path) -> None:
         """Raises StepError when ffmpeg returns non-zero exit code."""
