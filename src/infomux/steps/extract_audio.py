@@ -29,8 +29,8 @@ from infomux.steps import StepError, StepResult, register_step
 
 logger = get_logger(__name__)
 
-# Output filename for extracted audio
-AUDIO_FILENAME = "audio.wav"
+# Output filename for extracted audio (full mix)
+AUDIO_FILENAME = "audio_full.wav"
 
 
 @register_step

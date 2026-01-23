@@ -11,7 +11,7 @@ Command (Spleeter):
     spleeter separate -i <input.wav> -o <output_dir> -p spleeter:2stems
 
 Output:
-    audio_vocals.wav - Isolated vocal track
+    audio_vocals_only.wav - Isolated vocal track
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from infomux.steps import StepError, StepResult, register_step
 logger = get_logger(__name__)
 
 # Output filename for isolated vocals
-VOCALS_FILENAME = "audio_vocals.wav"
+VOCALS_FILENAME = "audio_vocals_only.wav"
 
 # Register output filename for pipeline input resolution
 OUTPUT_FILENAME = VOCALS_FILENAME
@@ -86,7 +86,7 @@ class IsolateVocalsStep:
             input_path: Path to the input audio file.
             output_dir: Directory to write the extracted audio.
         """
-        audio_output = output_dir / "audio.wav"
+        audio_output = output_dir / "audio_full.wav"
         if audio_output.exists():
             return  # Already exists, skip
         

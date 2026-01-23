@@ -111,7 +111,7 @@ DEFAULT_PIPELINE = PipelineDef(
         ),
         StepDef(
             name="transcribe",
-            input_from="extract_audio",  # Uses audio.wav from previous step
+            input_from="extract_audio",  # Uses audio_full.wav from previous step
         ),
     ],
 )
@@ -326,12 +326,12 @@ LYRIC_VIDEO_ISOLATED_PIPELINE = PipelineDef(
         ),
         StepDef(
             name="transcribe_timed",
-            input_from="isolate_vocals",  # Use isolated vocals for transcription
+            input_from="isolate_vocals",  # Use audio_vocals_only.wav for transcription
             config={"generate_word_level": True},  # Enable word-level timestamps
         ),
         StepDef(
             name="extract_audio",
-            input_from=None,  # Extract audio from original input for video generation
+            input_from=None,  # Extract audio_full.wav from original input for video generation
         ),
         StepDef(
             name="generate_lyric_video",
@@ -361,7 +361,7 @@ LYRIC_VIDEO_ALIGNED_ISOLATED_PIPELINE = PipelineDef(
         ),
         StepDef(
             name="align_lyrics",
-            input_from="isolate_vocals",  # Align lyrics to isolated vocals (better accuracy)
+            input_from="isolate_vocals",  # Align lyrics to audio_vocals_only.wav (better accuracy)
             config={"language": "eng"},
         ),
         StepDef(

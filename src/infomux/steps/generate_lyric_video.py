@@ -105,8 +105,8 @@ class GenerateLyricVideoStep:
             raise StepError(self.name, f"audio not found: {input_path}")
 
         # Ensure we're using the original audio (not isolated vocals)
-        # The isolated vocals (audio_vocals.wav) should only be used for transcription
-        if input_path.name == "audio_vocals.wav":
+        # The isolated vocals (audio_vocals_only.wav) should only be used for transcription
+        if input_path.name == "audio_vocals_only.wav":
             logger.warning(
                 "generate_lyric_video received isolated vocals instead of original audio. "
                 "This will result in video without background music. "

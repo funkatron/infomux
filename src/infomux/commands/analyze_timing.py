@@ -305,9 +305,9 @@ def execute(args: Namespace) -> int:
     logger.info("found %d words in transcript", len(words))
     
     # Find audio file for analysis
-    audio_path = run_dir / "audio.wav"
+    audio_path = run_dir / "audio_full.wav"
     if not audio_path.exists():
-        logger.warning("audio.wav not found, skipping audio analysis")
+        logger.warning("audio_full.wav not found, skipping audio analysis")
         audio_path = None
     
     # Create frames directory
