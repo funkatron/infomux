@@ -17,7 +17,7 @@ import json
 import subprocess
 import time
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import ftfy
@@ -656,7 +656,6 @@ class GenerateLyricVideoStep:
             # (including spacing between words)
             first_word = line_words[0]
             last_word = line_words[-1]
-            first_word_width = len(first_word.word.text) * char_width
             last_word_width = len(last_word.word.text) * char_width
             total_line_width = last_word.x + last_word_width - first_word.x
             

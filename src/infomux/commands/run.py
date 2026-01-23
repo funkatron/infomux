@@ -588,23 +588,24 @@ def _check_dependencies() -> int:
         print("  Install: brew install tesseract")
 
     # EasyOCR (optional, better quality with GPU support)
-    easyocr_available = False
     try:
-        import easyocr
-        import torch
-        # Check for GPU acceleration
-        has_mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
-        has_cuda = torch.cuda.is_available()
-        gpu_status = ""
-        if has_mps:
-            gpu_status = " (Metal/Apple Silicon GPU)"
-        elif has_cuda:
-            gpu_status = " (CUDA GPU)"
-        else:
-            gpu_status = " (CPU only)"
+        import importlib.util
+        if importlib.util.find_spec("easyocr") is not None:
+            import torch
+            # Check for GPU acceleration
+            has_mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+            has_cuda = torch.cuda.is_available()
+            gpu_status = ""
+            if has_mps:
+                gpu_status = " (Metal/Apple Silicon GPU)"
+            elif has_cuda:
+                gpu_status = " (CUDA GPU)"
+            else:
+                gpu_status = " (CPU only)"
 
-        easyocr_available = True
-        print(f"✓ EasyOCR: available{gpu_status} (optional, better quality)")
+            print(f"✓ EasyOCR: available{gpu_status} (optional, better quality)")
+        else:
+            print("○ EasyOCR: NOT FOUND (optional, for better OCR quality)")
     except ImportError:
         print("○ EasyOCR: NOT FOUND (optional, for better OCR quality)")
         print("  Install: pip install easyocr")

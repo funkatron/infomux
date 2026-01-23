@@ -127,9 +127,9 @@ class TestLyricVideoVocalsPipeline:
             assert step.status == "completed", f"Step {step.name} failed: {step.error}"
         
         # Verify outputs exist
-        assert (run_dir / "audio_vocals.wav").exists(), "isolate_vocals should create audio_vocals.wav"
+        assert (run_dir / "audio_vocals_only.wav").exists(), "isolate_vocals should create audio_vocals_only.wav"
         assert (run_dir / "transcript.json").exists(), "transcribe_timed should create transcript.json"
-        assert (run_dir / "audio.wav").exists(), "extract_audio should create audio.wav"
+        assert (run_dir / "audio_full.wav").exists(), "extract_audio should create audio_full.wav"
         
         # Find lyric video output
         video_files = list(run_dir.glob("*_lyric_video.mp4"))
@@ -378,9 +378,9 @@ Five times by design. I'm still alive."""
             assert step.status == "completed", f"Step {step.name} failed: {step.error}"
         
         # Verify outputs exist
-        assert (run_dir / "audio_vocals.wav").exists(), "isolate_vocals should create audio_vocals.wav"
+        assert (run_dir / "audio_vocals_only.wav").exists(), "isolate_vocals should create audio_vocals_only.wav"
         assert (run_dir / "transcript.json").exists(), "align_lyrics should create transcript.json"
-        assert (run_dir / "audio.wav").exists(), "extract_audio should create audio.wav"
+        assert (run_dir / "audio_full.wav").exists(), "extract_audio should create audio_full.wav"
         
         # Find lyric video output
         video_files = list(run_dir.glob("*_lyric_video.mp4"))

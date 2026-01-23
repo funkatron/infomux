@@ -22,7 +22,7 @@ import os
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -44,11 +44,8 @@ OUTPUT_FILENAME = TRANSCRIPT_JSON_FILENAME
 
 def _check_stable_ts_available() -> bool:
     """Check if stable-ts is available."""
-    try:
-        import stable_whisper
-        return True
-    except ImportError:
-        return False
+    import importlib.util
+    return importlib.util.find_spec("stable_whisper") is not None
 
 
 def _check_aeneas_available() -> bool:
