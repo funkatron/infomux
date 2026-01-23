@@ -1124,6 +1124,10 @@ class GenerateLyricVideoStep:
         # Add encoding options
         cmd.extend(
             [
+                "-c:v",
+                "libx264",  # H.264 video codec
+                "-pix_fmt",
+                "yuv420p",  # Standard pixel format for compatibility
                 "-c:a",
                 "aac",  # Encode audio as AAC for MP4
                 "-b:a",
