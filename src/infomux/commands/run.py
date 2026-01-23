@@ -216,6 +216,15 @@ def configure_parser(parser: ArgumentParser) -> None:
         "Requires lyric-video-aligned pipeline (includes vocal isolation).",
     )
     parser.add_argument(
+        "--alignment-model",
+        type=str,
+        default=None,
+        choices=["tiny", "base", "small", "medium", "large"],
+        help="Whisper model size for forced alignment (default: base). "
+        "Larger models are more accurate but slower. "
+        "Requires lyric-video-aligned pipeline.",
+    )
+    parser.add_argument(
         "--lyric-font-color",
         type=str,
         default=None,
@@ -446,6 +455,12 @@ def execute(args: Namespace) -> int:
             logger.error("lyrics file not found: %s", args.lyrics_file)
             return 1
         step_configs["align_lyrics"] = {"lyrics_file": str(args.lyrics_file)}
+
+    # Alignment model config
+    if args.alignment_model:
+        align_config = step_configs.get("align_lyrics", {})
+        align_config["model"] = args.alignment_model
+        step_configs["align_lyrics"] = align_config
 
     # Word-level subtitles config
     if args.word_level_subtitles:
