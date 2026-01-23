@@ -23,7 +23,7 @@ from pathlib import Path
 
 from infomux.config import get_tool_paths
 from infomux.job import InputFile, JobEnvelope, JobStatus, generate_run_id
-from infomux.log import get_logger
+from infomux.log import configure_logging, get_logger
 from infomux.pipeline import run_pipeline
 from infomux.pipeline_def import get_pipeline
 from infomux.storage import get_run_dir, save_job
@@ -431,6 +431,11 @@ def execute(args: Namespace) -> int:
     run_dir = get_run_dir(job.id)
     if not run_dir.exists():
         run_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Configure logging to also write to a file in the run directory
+    log_file = run_dir / "run.log"
+    configure_logging(log_file=log_file)
+    
     logger.info("created run: %s", job.id)
     logger.debug("run directory: %s", run_dir)
 

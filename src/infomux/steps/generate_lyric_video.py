@@ -269,6 +269,12 @@ class GenerateLyricVideoStep:
                 check=False,
             )
 
+            # Log subprocess output (goes to log file if configured)
+            if result.stderr:
+                logger.debug("ffmpeg stderr: %s", result.stderr)
+            if result.stdout:
+                logger.debug("ffmpeg stdout: %s", result.stdout)
+
             if result.returncode != 0:
                 logger.error("ffmpeg stderr: %s", result.stderr[-500:])
                 raise StepError(
