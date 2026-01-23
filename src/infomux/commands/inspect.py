@@ -100,6 +100,13 @@ def configure_parser(parser: ArgumentParser) -> None:
         "Useful for monitoring a running job. "
         "Use '--tail 0' to follow the log in real-time.",
     )
+    parser.add_argument(
+        "--follow",
+        "-f",
+        action="store_true",
+        help="Follow the run.log file in real-time (same as --tail 0). "
+        "Press Ctrl+C to stop.",
+    )
 
 
 def execute(args: Namespace) -> int:
@@ -146,20 +153,19 @@ def execute(args: Namespace) -> int:
             _open_directory(run_dir)
         return 0
 
-    # Handle --log or --tail flags
-    if args.log or args.tail is not None:
+    # Handle --log, --tail, or --follow flags
+    if args.log or args.tail is not None or args.follow:
         log_file = run_dir / "run.log"
         if not log_file.exists():
             logger.error("log file not found: %s", log_file)
             return 1
         
-        if args.tail is not None:
-            if args.tail == 0:
-                # Follow mode (like tail -f)
-                _tail_log_file(log_file, follow=True)
-            else:
-                # Show last N lines
-                _tail_log_file(log_file, follow=False, lines=args.tail)
+        if args.follow or (args.tail is not None and args.tail == 0):
+            # Follow mode (like tail -f)
+            _tail_log_file(log_file, follow=True)
+        elif args.tail is not None:
+            # Show last N lines
+            _tail_log_file(log_file, follow=False, lines=args.tail)
         else:
             # Show full log
             _show_log_file(log_file)
