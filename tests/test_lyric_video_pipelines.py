@@ -15,6 +15,7 @@ Note: Full execution tests are skipped by default as they require:
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -77,6 +78,11 @@ class TestLyricVideoVocalsPipeline:
         
         Marked as skip if file doesn't exist to avoid failures in CI.
         """
+        # Check external dependencies required for this integration test.
+        for tool in ("ffmpeg", "demucs", "whisper-cli"):
+            if shutil.which(tool) is None:
+                pytest.skip(f"{tool} not installed - required for integration test")
+
         # Use test fixture audio file (60-second sample)
         audio_file = Path(__file__).parent / "fixtures" / "test-audio-sample.mp3"
         
@@ -92,6 +98,8 @@ class TestLyricVideoVocalsPipeline:
             model_path = Path.home() / ".local" / "share" / "infomux" / "models" / "whisper" / "ggml-base.en.bin"
             if model_path.exists():
                 monkeypatch.setenv("INFOMUX_WHISPER_MODEL", str(model_path))
+            else:
+                pytest.skip("Whisper model not found - required for integration test")
         
         # Create job
         from infomux.job import InputFile
@@ -106,7 +114,6 @@ class TestLyricVideoVocalsPipeline:
         run_dir.mkdir(parents=True)
         
         # Copy input file to run directory (simulate what the pipeline does)
-        import shutil
         run_input = run_dir / audio_file.name
         shutil.copy2(audio_file, run_input)
         job.input.path = str(run_input)
@@ -304,6 +311,10 @@ Five times by design. I'm still alive."""
         This test demonstrates using official lyrics for more accurate timing than transcription.
         Example: "These Days" by Dogtablet
         """
+        for tool in ("ffmpeg", "demucs", "whisper-cli"):
+            if shutil.which(tool) is None:
+                pytest.skip(f"{tool} not installed - required for integration test")
+
         # Check if aeneas is available
         import sys
         try:
@@ -334,6 +345,8 @@ Five times by design. I'm still alive."""
             model_path = Path.home() / ".local" / "share" / "infomux" / "models" / "whisper" / "ggml-base.en.bin"
             if model_path.exists():
                 monkeypatch.setenv("INFOMUX_WHISPER_MODEL", str(model_path))
+            else:
+                pytest.skip("Whisper model not found - required for integration test")
         
         # Create job
         from infomux.job import InputFile
@@ -348,7 +361,6 @@ Five times by design. I'm still alive."""
         run_dir.mkdir(parents=True)
         
         # Copy input file to run directory
-        import shutil
         run_input = run_dir / audio_file.name
         shutil.copy2(audio_file, run_input)
         job.input.path = str(run_input)

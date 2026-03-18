@@ -55,13 +55,13 @@ class TestDeviceLists:
     """Tests for device list filtering."""
 
     def test_list_input_devices(self) -> None:
-        """list_input_devices returns only input devices."""
+        """list_input_devices returns only input-capable devices."""
         # This will fail if no input devices exist, which is fine
         # We're testing the filtering logic, not device availability
         try:
             inputs = list_input_devices()
             for device in inputs:
-                assert device.direction == "input"
+                assert device.has_input is True
         except RuntimeError:
             # No devices available - skip test
             pytest.skip("No audio devices available")
@@ -81,11 +81,11 @@ class TestDefaultDevices:
     """Tests for default device selection."""
 
     def test_get_default_input(self) -> None:
-        """get_default_input returns first input device."""
+        """get_default_input returns an input-capable device."""
         try:
             default = get_default_input()
             if default:
-                assert default.direction == "input"
+                assert default.has_input is True
         except RuntimeError:
             pytest.skip("No input devices available")
 
