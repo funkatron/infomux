@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import sys
 from argparse import ArgumentParser, Namespace
+from datetime import UTC, datetime
 
 from infomux.config import get_tool_paths
 from infomux.job import JobStatus
@@ -165,7 +166,20 @@ def execute(args: Namespace) -> int:
         logger.debug("content type hint: %s", args.content_type_hint)
 
     # Execute the remaining steps
-    success = run_pipeline(job, run_dir, pipeline=pipeline, step_names=steps_to_run)
+    try:
+        success = run_pipeline(job, run_dir, pipeline=pipeline, step_names=steps_to_run)
+    except KeyboardInterrupt:
+        logger.info("resume interrupted by user")
+        for step in reversed(job.steps):
+            if step.status == "running":
+                step.status = "interrupted"
+                step.completed_at = datetime.now(UTC).isoformat()
+                step.error = "interrupted by user"
+                break
+        job.update_status(JobStatus.INTERRUPTED, "interrupted by user")
+        save_job(job)
+        print(get_run_dir(job.id), file=sys.stdout)
+        return 130
 
     # Update final status
     if success:

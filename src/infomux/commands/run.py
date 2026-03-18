@@ -522,9 +522,22 @@ def execute(args: Namespace) -> int:
         step_configs["generate_lyric_video"] = lyric_video_config
 
     # Execute pipeline
-    success = run_pipeline(
-        job, run_dir, pipeline=pipeline, step_names=step_names, step_configs=step_configs
-    )
+    try:
+        success = run_pipeline(
+            job, run_dir, pipeline=pipeline, step_names=step_names, step_configs=step_configs
+        )
+    except KeyboardInterrupt:
+        logger.info("run interrupted by user")
+        for step in reversed(job.steps):
+            if step.status == "running":
+                step.status = "interrupted"
+                step.completed_at = datetime.now(UTC).isoformat()
+                step.error = "interrupted by user"
+                break
+        job.update_status(JobStatus.INTERRUPTED, "interrupted by user")
+        save_job(job)
+        print(run_dir, file=sys.stdout)
+        return 130
 
     # Update final status
     if success:

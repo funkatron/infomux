@@ -4,9 +4,13 @@ Tests for the CLI module.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from infomux.cli import create_parser, main
+from infomux.job import InputFile, JobEnvelope, JobStatus, StepRecord
+from infomux.storage import list_runs, load_job, save_job
 
 
 class TestParser:
@@ -99,3 +103,63 @@ class TestMain:
         exit_code = main(["inspect", "--list"])
 
         assert exit_code == 0
+
+    def test_run_keyboard_interrupt_marks_job_interrupted(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """Interrupted runs persist as interrupted in job.json."""
+        monkeypatch.setenv("INFOMUX_DATA_DIR", str(tmp_path))
+        test_file = tmp_path / "test.mp4"
+        test_file.write_bytes(b"fake video")
+
+        class DummyTools:
+            def validate(self) -> list[str]:
+                return []
+
+        with (
+            patch("infomux.commands.run.get_tool_paths", return_value=DummyTools()),
+            patch(
+                "infomux.commands.run.run_pipeline",
+                side_effect=KeyboardInterrupt,
+            ),
+        ):
+            exit_code = main(["run", str(test_file)])
+
+        assert exit_code == 130
+        runs = list_runs()
+        assert len(runs) == 1
+        job = load_job(runs[0])
+        assert job.status == JobStatus.INTERRUPTED.value
+        assert job.error == "interrupted by user"
+
+    def test_resume_keyboard_interrupt_marks_job_interrupted(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """Interrupted resume persists interrupted status."""
+        monkeypatch.setenv("INFOMUX_DATA_DIR", str(tmp_path))
+        input_path = tmp_path / "resume-input.mp4"
+        input_path.write_bytes(b"fake video")
+        input_file = InputFile.from_path(input_path)
+        job = JobEnvelope.create(input_file=input_file)
+        job.config["pipeline"] = "transcribe"
+        job.update_status(JobStatus.FAILED, "prior failure")
+        job.steps = [StepRecord(name="extract_audio", status="completed")]
+        save_job(job)
+
+        class DummyTools:
+            def validate(self) -> list[str]:
+                return []
+
+        with (
+            patch("infomux.commands.resume.get_tool_paths", return_value=DummyTools()),
+            patch(
+                "infomux.commands.resume.run_pipeline",
+                side_effect=KeyboardInterrupt,
+            ),
+        ):
+            exit_code = main(["resume", job.id])
+
+        assert exit_code == 130
+        resumed_job = load_job(job.id)
+        assert resumed_job.status == JobStatus.INTERRUPTED.value
+        assert resumed_job.error == "interrupted by user"
