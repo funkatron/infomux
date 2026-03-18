@@ -104,6 +104,8 @@ def parse_time_spec(spec: str) -> timedelta:
         number = int(spec[:-1])
     except ValueError:
         raise ValueError(f"invalid number in time specification: {spec[:-1]}")
+    if number <= 0:
+        raise ValueError(f"time value must be > 0: {number}")
 
     unit = spec[-1]
     if unit == "d":
@@ -180,51 +182,40 @@ def execute(args: Namespace) -> int:
         if job_path.exists():
             try:
                 job = load_job(run_id)
-
-                # Check status filter
-                if args.status and job.status == args.status:
-                    # Additional check: if min_age is set, verify the run is old enough
-                    if min_age_delta:
-                        try:
-                            created_str = job.created_at.replace("Z", "+00:00")
-                            created_at = datetime.fromisoformat(created_str)
-                            if created_at.tzinfo is None:
-                                created_at = created_at.replace(tzinfo=UTC)
-                            now = datetime.now(UTC)
-                            age = now - created_at
-                            if age < min_age_delta:
-                                logger.debug("skipping %s: too recent (age: %s)", run_id, age)
-                                continue
-                        except (ValueError, AttributeError) as e:
-                            logger.debug("could not parse date for %s: %s", run_id, e)
-                            # If we can't parse the date, skip the min_age check
-                            pass
-
-                    runs_to_delete.append((run_id, f"status: {job.status}"))
+                # Status and age-based filters are conjunctive when combined.
+                if not args.status and not older_than_delta:
                     continue
 
-                # Check age filter
-                if older_than_delta:
+                status_match = args.status is None or job.status == args.status
+                if not status_match:
+                    continue
+
+                age = None
+                if older_than_delta or min_age_delta:
                     try:
-                        # Parse ISO format timestamp
                         created_str = job.created_at.replace("Z", "+00:00")
                         created_at = datetime.fromisoformat(created_str)
-                        # Ensure timezone-aware
                         if created_at.tzinfo is None:
                             created_at = created_at.replace(tzinfo=UTC)
-                        # Get current time in UTC
-                        now = datetime.now(UTC)
-                        age = now - created_at
-                        if age > older_than_delta:
-                            # Additional check: if min_age is set, verify the run is old enough
-                            if min_age_delta and age < min_age_delta:
-                                logger.debug("skipping %s: too recent (age: %s)", run_id, age)
-                                continue
-
-                            runs_to_delete.append((run_id, f"older than {args.older_than} (age: {age.days}d)"))
+                        age = datetime.now(UTC) - created_at
                     except (ValueError, AttributeError) as e:
                         logger.debug("could not parse date for %s: %s", run_id, e)
                         continue
+
+                if older_than_delta and (age is None or age <= older_than_delta):
+                    continue
+                if min_age_delta and (age is None or age < min_age_delta):
+                    logger.debug("skipping %s: too recent (age: %s)", run_id, age)
+                    continue
+
+                reason_parts = []
+                if args.status:
+                    reason_parts.append(f"status: {job.status}")
+                if older_than_delta and age is not None:
+                    reason_parts.append(f"older than {args.older_than} (age: {age.days}d)")
+                if not reason_parts:
+                    reason_parts.append("matched filters")
+                runs_to_delete.append((run_id, ", ".join(reason_parts)))
 
             except Exception as e:
                 # If we can't load the job, it might be corrupted
