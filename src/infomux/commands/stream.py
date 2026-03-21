@@ -162,6 +162,20 @@ def configure_parser(parser: ArgumentParser) -> None:
         "Overrides the default model. Example: qwen2.5:32b-instruct",
     )
     parser.add_argument(
+        "--openai-model",
+        type=str,
+        default=None,
+        help="OpenAI model for summarize_openai-based pipelines. "
+        "Overrides INFOMUX_OPENAI_MODEL.",
+    )
+    parser.add_argument(
+        "--openai-base-url",
+        type=str,
+        default=None,
+        help="OpenAI API base URL for summarize_openai-based pipelines. "
+        "Overrides INFOMUX_OPENAI_BASE_URL.",
+    )
+    parser.add_argument(
         "--content-type-hint",
         type=str,
         default=None,
@@ -273,7 +287,7 @@ def _print_instructions(
     if silence:
         print(f"    • Stay silent for {silence} seconds", file=sys.stderr)
     if stop_word:
-        print(f"    • Say \"{stop_word}\"", file=sys.stderr)
+        print(f'    • Say "{stop_word}"', file=sys.stderr)
     print("─" * 50, file=sys.stderr)
     print(file=sys.stderr)
 
@@ -296,7 +310,7 @@ def _print_instructions_multi(
     if silence:
         print(f"    • Stay silent for {silence} seconds", file=sys.stderr)
     if stop_word:
-        print(f"    • Say \"{stop_word}\"", file=sys.stderr)
+        print(f'    • Say "{stop_word}"', file=sys.stderr)
     print("─" * 50, file=sys.stderr)
     print(file=sys.stderr)
 
@@ -369,7 +383,7 @@ def execute(args: Namespace) -> int:
         else:
             # New default behavior: record input + output
             # Logic: if flag is -1, disable that side; if None, use default; if set, use specified
-            
+
             # Handle input device selection
             if args.input == -1:
                 # Explicitly disabled
@@ -413,7 +427,9 @@ def execute(args: Namespace) -> int:
                 default_loopback = get_default_loopback()
                 if default_loopback:
                     loopback_devices = [default_loopback]
-                    logger.debug("Using default loopback device: %s", default_loopback.name)
+                    logger.debug(
+                        "Using default loopback device: %s", default_loopback.name
+                    )
                     logger.info(
                         "Note: To capture system audio, set '%s' as your system output device "
                         "in System Settings > Sound > Output",
@@ -424,7 +440,9 @@ def execute(args: Namespace) -> int:
                     default_output = get_default_output()
                     if default_output:
                         loopback_devices = [default_output]
-                        logger.debug("Using default output device: %s", default_output.name)
+                        logger.debug(
+                            "Using default output device: %s", default_output.name
+                        )
                         logger.warning(
                             "No loopback device found. Using '%s' for output capture. "
                             "For system audio, install BlackHole or set a loopback device as system output.",
@@ -432,21 +450,35 @@ def execute(args: Namespace) -> int:
                         )
                     else:
                         logger.warning("No output device found")
-                        logger.info("Install BlackHole or similar loopback device to capture system audio")
+                        logger.info(
+                            "Install BlackHole or similar loopback device to capture system audio"
+                        )
 
     # Validate we have at least one device
     all_devices = input_devices + loopback_devices
-    
+
     # Log what we selected for debugging
     logger.info("Selected devices for recording:")
-    logger.info("  Input devices (%d): %s", len(input_devices), [f"{d.name} (id={d.id})" for d in input_devices])
-    logger.info("  Loopback devices (%d): %s", len(loopback_devices), [f"{d.name} (id={d.id})" for d in loopback_devices])
+    logger.info(
+        "  Input devices (%d): %s",
+        len(input_devices),
+        [f"{d.name} (id={d.id})" for d in input_devices],
+    )
+    logger.info(
+        "  Loopback devices (%d): %s",
+        len(loopback_devices),
+        [f"{d.name} (id={d.id})" for d in loopback_devices],
+    )
     logger.info("  Total devices: %d", len(all_devices))
-    
+
     if len(loopback_devices) == 0:
-        logger.warning("No loopback devices selected - system audio will not be captured")
-        logger.info("To capture system audio, ensure BlackHole or similar is installed and detected")
-    
+        logger.warning(
+            "No loopback devices selected - system audio will not be captured"
+        )
+        logger.info(
+            "To capture system audio, ensure BlackHole or similar is installed and detected"
+        )
+
     if not all_devices:
         logger.error("No devices selected for recording")
         logger.info(
@@ -486,11 +518,10 @@ def execute(args: Namespace) -> int:
         # Record with ffmpeg (supports multiple devices and mixing)
         audio_path = run_dir / "audio.wav"
         device_names = [d.name for d in all_devices]
-        logger.info(
-            "Recording audio with ffmpeg from: %s", " + ".join(device_names)
-        )
+        logger.info("Recording audio with ffmpeg from: %s", " + ".join(device_names))
         # Check if verbose mode is enabled (DEBUG log level)
         import logging
+
         is_verbose = logger.isEnabledFor(logging.DEBUG)
 
         try:
@@ -527,14 +558,20 @@ def execute(args: Namespace) -> int:
                     logger.warning("ffmpeg did not stop, killing")
                     record_process.kill()
                     record_process.wait()
-            
+
             # Check if file was created (even if interrupted)
             if audio_path.exists() and audio_path.stat().st_size > 0:
-                logger.info("Recording saved: %s (%d bytes)", audio_path.name, audio_path.stat().st_size)
+                logger.info(
+                    "Recording saved: %s (%d bytes)",
+                    audio_path.name,
+                    audio_path.stat().st_size,
+                )
                 job.artifacts.append(str(audio_path))
                 job.update_status(JobStatus.INTERRUPTED, "Recording interrupted")
             else:
-                job.update_status(JobStatus.FAILED, "Recording interrupted - no file created")
+                job.update_status(
+                    JobStatus.FAILED, "Recording interrupted - no file created"
+                )
             save_job(job)
             return 130  # Standard exit code for Ctrl+C
 
@@ -569,14 +606,17 @@ def execute(args: Namespace) -> int:
                     "ffmpeg recording failed (exit code %d)",
                     return_code,
                 )
-                
+
                 # Show helpful error message (only if we captured stderr)
                 # If verbose mode, stderr was already shown in real-time
                 if not is_verbose and stderr:
                     # Extract error lines (usually contain "Error" or important info)
                     error_lines = [
-                        line for line in stderr.split("\n")
-                        if "error" in line.lower() or "Error" in line or "failed" in line.lower()
+                        line
+                        for line in stderr.split("\n")
+                        if "error" in line.lower()
+                        or "Error" in line
+                        or "failed" in line.lower()
                     ]
                     if error_lines:
                         logger.error("ffmpeg errors:\n%s", "\n".join(error_lines[-5:]))
@@ -584,15 +624,20 @@ def execute(args: Namespace) -> int:
                         # Show last few lines if no obvious errors
                         all_lines = stderr.strip().split("\n")
                         if all_lines:
-                            logger.error("ffmpeg output (last 10 lines):\n%s", "\n".join(all_lines[-10:]))
+                            logger.error(
+                                "ffmpeg output (last 10 lines):\n%s",
+                                "\n".join(all_lines[-10:]),
+                            )
                 elif not is_verbose:
-                    logger.error("No error output from ffmpeg (check if devices are accessible)")
-                    logger.info("Run with -v or --verbose to see real-time ffmpeg output")
-                
-                if not file_created:
-                    job.update_status(
-                        JobStatus.FAILED, f"ffmpeg exited {return_code}"
+                    logger.error(
+                        "No error output from ffmpeg (check if devices are accessible)"
                     )
+                    logger.info(
+                        "Run with -v or --verbose to see real-time ffmpeg output"
+                    )
+
+                if not file_created:
+                    job.update_status(JobStatus.FAILED, f"ffmpeg exited {return_code}")
                     save_job(job)
                     return 1
 
@@ -633,20 +678,30 @@ def execute(args: Namespace) -> int:
             # Set model override if specified
             if args.model:
                 import os
+
                 os.environ["INFOMUX_OLLAMA_MODEL"] = args.model
                 logger.debug("using model: %s", args.model)
+            if args.openai_model:
+                import os
+
+                os.environ["INFOMUX_OPENAI_MODEL"] = args.openai_model
+                logger.debug("using OpenAI model: %s", args.openai_model)
+            if args.openai_base_url:
+                import os
+
+                os.environ["INFOMUX_OPENAI_BASE_URL"] = args.openai_base_url
+                logger.debug("using OpenAI base URL: %s", args.openai_base_url)
 
             # Set content type hint if specified
             if args.content_type_hint:
                 import os
+
                 os.environ["INFOMUX_CONTENT_TYPE_HINT"] = args.content_type_hint
                 logger.debug("content type hint: %s", args.content_type_hint)
 
             # Run pipeline (skip steps that don't apply to audio-only)
             skip_steps = {"extract_audio", "embed_subs"}  # No video input
-            steps_to_run = [
-                s.name for s in pipeline.steps if s.name not in skip_steps
-            ]
+            steps_to_run = [s.name for s in pipeline.steps if s.name not in skip_steps]
             success = run_pipeline(
                 job=job,
                 run_dir=run_dir,
@@ -678,9 +733,12 @@ def execute(args: Namespace) -> int:
 
         cmd = [
             str(whisper_stream),
-            "-m", str(model_path),
-            "-c", str(device.id),
-            "-l", args.language,
+            "-m",
+            str(model_path),
+            "-c",
+            str(device.id),
+            "-l",
+            args.language,
         ]
 
         # Only use -f if no monitoring (monitoring writes its own timestamped file)
@@ -730,12 +788,24 @@ def execute(args: Namespace) -> int:
                 # Set model override if specified
                 if args.model:
                     import os
+
                     os.environ["INFOMUX_OLLAMA_MODEL"] = args.model
                     logger.debug("using model: %s", args.model)
+                if args.openai_model:
+                    import os
+
+                    os.environ["INFOMUX_OPENAI_MODEL"] = args.openai_model
+                    logger.debug("using OpenAI model: %s", args.openai_model)
+                if args.openai_base_url:
+                    import os
+
+                    os.environ["INFOMUX_OPENAI_BASE_URL"] = args.openai_base_url
+                    logger.debug("using OpenAI base URL: %s", args.openai_base_url)
 
                 # Set content type hint if specified
                 if args.content_type_hint:
                     import os
+
                     os.environ["INFOMUX_CONTENT_TYPE_HINT"] = args.content_type_hint
                     logger.debug("content type hint: %s", args.content_type_hint)
 
@@ -906,7 +976,7 @@ def interactive_device_selection() -> tuple[list[AudioDevice], list[AudioDevice]
     """
     inputs = list_input_devices()
     outputs = list_output_devices()
-    loopbacks = list_loopback_devices()
+    list_loopback_devices()
 
     if not inputs and not outputs:
         print("No audio devices found.", file=sys.stderr)
@@ -940,9 +1010,7 @@ def interactive_device_selection() -> tuple[list[AudioDevice], list[AudioDevice]
     default_input = str(inputs[0].id) if inputs else "-1"
     print(file=sys.stderr)
     print("-" * 60, file=sys.stderr)
-    prompt = (
-        f"Select inputs (comma-separated IDs, -1 for none) [{default_input}]: "
-    )
+    prompt = f"Select inputs (comma-separated IDs, -1 for none) [{default_input}]: "
 
     try:
         input_line = input(prompt).strip()
@@ -985,9 +1053,7 @@ def interactive_device_selection() -> tuple[list[AudioDevice], list[AudioDevice]
     default_loopback = str(outputs[0].id) if outputs else "-1"
     print(file=sys.stderr)
     print("-" * 60, file=sys.stderr)
-    prompt = (
-        f"Select outputs (comma-separated IDs, -1 for none) [{default_loopback}]: "
-    )
+    prompt = f"Select outputs (comma-separated IDs, -1 for none) [{default_loopback}]: "
 
     try:
         loopback_line = input(prompt).strip()
@@ -1074,7 +1140,11 @@ def _display_devices_with_meters(
             selected = "✓" if device.id in selected_loopback_ids else " "
             name_padded = device.name.ljust(30)
             # Mark loopback devices
-            loopback_marker = " [loopback]" if (device.is_virtual or device.direction == "loopback") else ""
+            loopback_marker = (
+                " [loopback]"
+                if (device.is_virtual or device.direction == "loopback")
+                else ""
+            )
             print(
                 f"    [{device.id}] {name_padded} [{meter}] {selected}{loopback_marker}",
                 file=sys.stderr,
@@ -1161,7 +1231,7 @@ def _list_devices() -> int:
 
     inputs = list_input_devices()
     outputs = list_output_devices()
-    loopbacks = list_loopback_devices()
+    list_loopback_devices()
 
     print("Available audio devices:")
     print()
@@ -1275,10 +1345,14 @@ def _run_whisper_cli_timestamps(
 
     cmd = [
         str(whisper_cli),
-        "-m", str(model_path),
-        "-l", language,
-        "-f", str(audio_file),
-        "-of", str(output_prefix),
+        "-m",
+        str(model_path),
+        "-l",
+        language,
+        "-f",
+        str(audio_file),
+        "-of",
+        str(output_prefix),
         "-ojf",  # Full JSON with timestamps
         "-osrt",  # SRT subtitles
         "-ovtt",  # VTT subtitles

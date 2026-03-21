@@ -4,6 +4,7 @@ Tests for the CLI module.
 
 from __future__ import annotations
 
+import os
 from unittest.mock import patch
 
 import pytest
@@ -44,6 +45,26 @@ class TestParser:
 
         assert args.steps == "a,b,c"
 
+    def test_run_openai_flags(self, tmp_path) -> None:
+        """run command accepts OpenAI override flags."""
+        parser = create_parser()
+        test_file = tmp_path / "test.mp4"
+        test_file.touch()
+
+        args = parser.parse_args(
+            [
+                "run",
+                "--openai-model",
+                "gpt-4o-mini",
+                "--openai-base-url",
+                "https://api.openai.com/v1",
+                str(test_file),
+            ]
+        )
+
+        assert args.openai_model == "gpt-4o-mini"
+        assert args.openai_base_url == "https://api.openai.com/v1"
+
     def test_inspect_command(self) -> None:
         """inspect command parses correctly."""
         parser = create_parser()
@@ -67,6 +88,38 @@ class TestParser:
 
         assert args.command == "resume"
         assert args.run_id == "run-123"
+
+    def test_cache_command(self) -> None:
+        """cache command parses correctly."""
+        parser = create_parser()
+        args = parser.parse_args(["cache", "external", "status", "--json"])
+
+        assert args.command == "cache"
+        assert args.json is True
+
+    def test_main_cache_dispatch(self) -> None:
+        """main dispatches cache command."""
+        with patch("infomux.commands.cache.execute", return_value=0) as mock_execute:
+            exit_code = main(["cache", "external", "status"])
+        assert exit_code == 0
+        assert mock_execute.called
+
+    def test_resume_openai_flags(self) -> None:
+        """resume command accepts OpenAI override flags."""
+        parser = create_parser()
+        args = parser.parse_args(
+            [
+                "resume",
+                "--openai-model",
+                "gpt-4.1-mini",
+                "--openai-base-url",
+                "https://api.openai.com/v1",
+                "run-123",
+            ]
+        )
+
+        assert args.openai_model == "gpt-4.1-mini"
+        assert args.openai_base_url == "https://api.openai.com/v1"
 
     def test_no_command_fails(self) -> None:
         """Missing command fails."""
@@ -103,6 +156,37 @@ class TestMain:
         exit_code = main(["inspect", "--list"])
 
         assert exit_code == 0
+
+    def test_main_loads_dotenv_from_cwd(self, tmp_path, monkeypatch) -> None:
+        """CLI startup loads .env values before command execution."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("INFOMUX_TEST_DOTENV", raising=False)
+        (tmp_path / ".env").write_text("INFOMUX_TEST_DOTENV=loaded\n")
+
+        with patch("infomux.commands.inspect.execute", return_value=0):
+            exit_code = main(["inspect", "--list"])
+
+        assert exit_code == 0
+        assert "INFOMUX_TEST_DOTENV" in os.environ
+
+    def test_main_missing_command_prints_recovery_tips(self, capsys) -> None:
+        """Missing command returns parse error with targeted tips."""
+        exit_code = main([])
+
+        assert exit_code == 2
+        captured = capsys.readouterr()
+        assert "Try one of these:" in captured.err
+        assert "infomux run input.mp4" in captured.err
+        assert "infomux --help" in captured.err
+
+    def test_main_cache_missing_domain_prints_recovery_tips(self, capsys) -> None:
+        """Missing cache domain/action returns parse error with tips."""
+        exit_code = main(["cache"])
+
+        assert exit_code == 2
+        captured = capsys.readouterr()
+        assert "infomux cache external status" in captured.err
+        assert "infomux cache external list" in captured.err
 
     def test_run_keyboard_interrupt_marks_job_interrupted(
         self, tmp_path, monkeypatch

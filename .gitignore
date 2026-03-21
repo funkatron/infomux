@@ -62,3 +62,6 @@ Thumbs.db
 # Project specific
 *.log
 tests/fixtures/
+.env
+.env.local
+.env.*

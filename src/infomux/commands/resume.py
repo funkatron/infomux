@@ -60,6 +60,20 @@ def configure_parser(parser: ArgumentParser) -> None:
         "Overrides the model used in the original run. Example: qwen2.5:32b-instruct",
     )
     parser.add_argument(
+        "--openai-model",
+        type=str,
+        default=None,
+        help="OpenAI model for summarize_openai-based steps. "
+        "Overrides INFOMUX_OPENAI_MODEL.",
+    )
+    parser.add_argument(
+        "--openai-base-url",
+        type=str,
+        default=None,
+        help="OpenAI API base URL for summarize_openai-based steps. "
+        "Overrides INFOMUX_OPENAI_BASE_URL.",
+    )
+    parser.add_argument(
         "--content-type-hint",
         type=str,
         default=None,
@@ -156,12 +170,24 @@ def execute(args: Namespace) -> int:
     # Set model override if specified
     if args.model:
         import os
+
         os.environ["INFOMUX_OLLAMA_MODEL"] = args.model
         logger.debug("using model: %s", args.model)
+    if args.openai_model:
+        import os
+
+        os.environ["INFOMUX_OPENAI_MODEL"] = args.openai_model
+        logger.debug("using OpenAI model: %s", args.openai_model)
+    if args.openai_base_url:
+        import os
+
+        os.environ["INFOMUX_OPENAI_BASE_URL"] = args.openai_base_url
+        logger.debug("using OpenAI base URL: %s", args.openai_base_url)
 
     # Set content type hint if specified
     if args.content_type_hint:
         import os
+
         os.environ["INFOMUX_CONTENT_TYPE_HINT"] = args.content_type_hint
         logger.debug("content type hint: %s", args.content_type_hint)
 
