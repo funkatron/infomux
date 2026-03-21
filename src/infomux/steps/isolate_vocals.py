@@ -46,7 +46,9 @@ class IsolateVocalsStep:
 
     name: str = "isolate_vocals"
     tool: str = "demucs"  # "demucs" or "spleeter"
-    model: str | None = None  # Model name (e.g., "htdemucs_ft" for Demucs, "spleeter:2stems" for Spleeter)
+    model: str | None = (
+        None  # Model name (e.g., "htdemucs_ft" for Demucs, "spleeter:2stems" for Spleeter)
+    )
 
     def execute(self, input_path: Path, output_dir: Path) -> list[Path]:
         """
@@ -71,17 +73,17 @@ class IsolateVocalsStep:
                 self.name,
                 f"Unknown tool: {self.tool}. Use 'demucs' or 'spleeter'.",
             )
-        
+
         # Also extract full audio if it doesn't exist (avoids re-extracting later)
         self._extract_full_audio_if_needed(input_path, output_dir)
-        
+
         return result
-    
+
     def _extract_full_audio_if_needed(self, input_path: Path, output_dir: Path) -> None:
         """
         Extract full audio as a side effect if it doesn't already exist.
         This avoids re-extracting the same file later in the pipeline.
-        
+
         Args:
             input_path: Path to the input audio file.
             output_dir: Directory to write the extracted audio.
@@ -89,11 +91,11 @@ class IsolateVocalsStep:
         audio_output = output_dir / "audio_full.wav"
         if audio_output.exists():
             return  # Already exists, skip
-        
+
         tools = get_tool_paths()
         if not tools.ffmpeg:
             return  # Can't extract without ffmpeg
-        
+
         logger.debug("extracting full audio as side effect: %s", audio_output.name)
         extract_cmd = [
             str(tools.ffmpeg),
@@ -177,7 +179,7 @@ class IsolateVocalsStep:
                 logger.error("demucs stderr: %s", error_msg)
                 if stdout_msg:
                     logger.error("demucs stdout: %s", stdout_msg)
-                
+
                 # Check for torchcodec error and suggest fallback
                 if "torchcodec" in combined_error:
                     logger.warning(
@@ -192,7 +194,7 @@ class IsolateVocalsStep:
                             "demucs failed (torchcodec required). Install torchcodec: uv pip install torchcodec, "
                             "or install Spleeter: uv pip install spleeter",
                         )
-                
+
                 raise StepError(
                     self.name,
                     f"demucs failed with exit code {result.returncode}",
@@ -202,7 +204,7 @@ class IsolateVocalsStep:
             # With --two-stems, it's directly in temp_output, not in a "separated" subdirectory
             # Find the vocals file
             vocals_file = None
-            
+
             # Try both structures: with and without "separated" subdirectory
             separated_dir = temp_output / "separated"
             if separated_dir.exists():
@@ -300,7 +302,9 @@ class IsolateVocalsStep:
             return [output_path]
 
         except FileNotFoundError:
-            raise StepError(self.name, "demucs not found. Install via: uv pip install demucs")
+            raise StepError(
+                self.name, "demucs not found. Install via: uv pip install demucs"
+            )
         except subprocess.SubprocessError as e:
             raise StepError(self.name, f"subprocess error: {e}")
 
@@ -327,7 +331,9 @@ class IsolateVocalsStep:
         temp_output.mkdir(exist_ok=True)
 
         # Build spleeter command
-        model = self.model or "spleeter:2stems"  # Default to 2-stem (vocals + accompaniment)
+        model = (
+            self.model or "spleeter:2stems"
+        )  # Default to 2-stem (vocals + accompaniment)
         cmd = [
             "spleeter",
             "separate",

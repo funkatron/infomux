@@ -63,7 +63,7 @@ class StoreJsonStep:
         try:
             # Include artifacts from job.json
             artifacts = run_data.job_json.get("artifacts", [])
-            
+
             export = {
                 "version": "1.0",
                 "exported_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),

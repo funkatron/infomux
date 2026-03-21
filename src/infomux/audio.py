@@ -225,7 +225,9 @@ def classify_device(device: AudioDevice) -> AudioDevice:
     device_caps = capabilities.get(device.name, {})
 
     # Set capabilities
-    device.has_input = device_caps.get("input", True)  # Default to True (most devices have input)
+    device.has_input = device_caps.get(
+        "input", True
+    )  # Default to True (most devices have input)
     device.has_output = device_caps.get("output", False)
     device.is_virtual = device_caps.get("virtual", False)
 
@@ -418,11 +420,16 @@ def get_audio_levels(
             # -f null: discard output (we only care about stderr stats)
             cmd = [
                 str(ffmpeg),
-                "-f", "avfoundation",
-                "-i", f":{device.id}",
-                "-t", str(duration),
-                "-af", "volumedetect",
-                "-f", "null",
+                "-f",
+                "avfoundation",
+                "-i",
+                f":{device.id}",
+                "-t",
+                str(duration),
+                "-af",
+                "volumedetect",
+                "-f",
+                "null",
                 "-",
             ]
 
@@ -567,9 +574,7 @@ def record_audio(
         # Reference inputs as [0:a], [1:a], etc. and concatenate them
         input_labels = "".join([f"[{i}:a]" for i in range(len(all_devices))])
         num_inputs = len(all_devices)
-        filter_complex = (
-            f"{input_labels}amix=inputs={num_inputs}:duration=longest[a]"
-        )
+        filter_complex = f"{input_labels}amix=inputs={num_inputs}:duration=longest[a]"
         cmd.extend(["-filter_complex", filter_complex])
         cmd.extend(["-map", "[a]"])
     # Single device: no mixing needed

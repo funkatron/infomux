@@ -161,6 +161,7 @@ class TestStreamMonitor:
         initial_time = monitor.last_speech_time
 
         import time
+
         time.sleep(0.01)
         monitor.on_speech("hello")
 
@@ -171,6 +172,7 @@ class TestStreamMonitor:
         monitor = StreamMonitor(mock_process)
 
         import time
+
         time.sleep(0.05)
 
         assert monitor.elapsed() >= 0.05
@@ -235,6 +237,7 @@ class TestConfigureParser:
 
     def test_parser_has_all_options(self):
         import argparse
+
         parser = argparse.ArgumentParser()
         configure_parser(parser)
 
@@ -251,6 +254,7 @@ class TestConfigureParser:
 
     def test_default_stop_word(self):
         import argparse
+
         parser = argparse.ArgumentParser()
         configure_parser(parser)
 
@@ -259,6 +263,7 @@ class TestConfigureParser:
 
     def test_default_language(self):
         import argparse
+
         parser = argparse.ArgumentParser()
         configure_parser(parser)
 

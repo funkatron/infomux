@@ -18,11 +18,10 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
-from infomux.job import JobEnvelope, JobStatus
+from infomux.job import JobEnvelope
 from infomux.pipeline import run_pipeline
 from infomux.pipeline_def import get_pipeline
 
@@ -65,17 +64,21 @@ class TestLyricVideoVocalsPipeline:
 
         generate_lyric_video = pipeline.get_step("generate_lyric_video")
         assert generate_lyric_video is not None
-        assert generate_lyric_video.input_from == "extract_audio"  # Uses extracted audio (with music)
+        assert (
+            generate_lyric_video.input_from == "extract_audio"
+        )  # Uses extracted audio (with music)
 
-    def test_pipeline_execution_with_real_file(self, tmp_path: Path, monkeypatch) -> None:
+    def test_pipeline_execution_with_real_file(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
         """
         Test pipeline execution with real audio file.
-        
+
         This is a functional test that requires:
         - Real audio file at the specified path
         - ffmpeg, demucs, whisper-cli installed
         - Sufficient time to run (may take several minutes)
-        
+
         Marked as skip if file doesn't exist to avoid failures in CI.
         """
         # Check external dependencies required for this integration test.
@@ -85,7 +88,7 @@ class TestLyricVideoVocalsPipeline:
 
         # Use test fixture audio file (60-second sample)
         audio_file = Path(__file__).parent / "fixtures" / "test-audio-sample.mp3"
-        
+
         if not audio_file.exists():
             pytest.skip(f"Test audio file not found: {audio_file}")
 
@@ -93,68 +96,84 @@ class TestLyricVideoVocalsPipeline:
         # But keep the whisper model path pointing to the real model location
         monkeypatch.setenv("INFOMUX_DATA_DIR", str(tmp_path))
         import os
+
         if "INFOMUX_WHISPER_MODEL" not in os.environ:
             # Set the whisper model path explicitly so it's found even with custom DATA_DIR
-            model_path = Path.home() / ".local" / "share" / "infomux" / "models" / "whisper" / "ggml-base.en.bin"
+            model_path = (
+                Path.home()
+                / ".local"
+                / "share"
+                / "infomux"
+                / "models"
+                / "whisper"
+                / "ggml-base.en.bin"
+            )
             if model_path.exists():
                 monkeypatch.setenv("INFOMUX_WHISPER_MODEL", str(model_path))
             else:
                 pytest.skip("Whisper model not found - required for integration test")
-        
+
         # Create job
         from infomux.job import InputFile
+
         input_file = InputFile.from_path(audio_file)
         job = JobEnvelope.create(input_file=input_file)
-        
+
         # Get pipeline
         pipeline = get_pipeline("lyric-video-vocals")
-        
+
         # Create run directory
         run_dir = tmp_path / "runs" / job.id
         run_dir.mkdir(parents=True)
-        
+
         # Copy input file to run directory (simulate what the pipeline does)
         run_input = run_dir / audio_file.name
         shutil.copy2(audio_file, run_input)
         job.input.path = str(run_input)
-        
+
         # Run pipeline
         success = run_pipeline(
             job=job,
             run_dir=run_dir,
             pipeline=pipeline,
         )
-        
+
         # Verify pipeline completed successfully
         assert success, f"Pipeline failed. Check job: {job.id}"
-        
+
         # Verify all steps completed
         assert len(job.steps) == 4, f"Expected 4 steps, got {len(job.steps)}"
         for step in job.steps:
             assert step.status == "completed", f"Step {step.name} failed: {step.error}"
-        
+
         # Verify outputs exist
-        assert (run_dir / "audio_vocals_only.wav").exists(), "isolate_vocals should create audio_vocals_only.wav"
-        assert (run_dir / "transcript.json").exists(), "transcribe_timed should create transcript.json"
-        assert (run_dir / "audio_full.wav").exists(), "extract_audio should create audio_full.wav"
-        
+        assert (run_dir / "audio_vocals_only.wav").exists(), (
+            "isolate_vocals should create audio_vocals_only.wav"
+        )
+        assert (run_dir / "transcript.json").exists(), (
+            "transcribe_timed should create transcript.json"
+        )
+        assert (run_dir / "audio_full.wav").exists(), (
+            "extract_audio should create audio_full.wav"
+        )
+
         # Find lyric video output
         video_files = list(run_dir.glob("*_lyric_video.mp4"))
         assert len(video_files) > 0, "generate_lyric_video should create lyric video"
-        
+
         # Verify transcript.json has word-level timestamps
         with open(run_dir / "transcript.json", encoding="utf-8", errors="replace") as f:
             transcript_data = json.load(f)
-        
+
         assert "transcription" in transcript_data
         transcription = transcript_data["transcription"]
         assert len(transcription) > 0, "transcript.json should have transcription data"
-        
+
         # Verify first segment has tokens with timestamps
         first_segment = transcription[0]
         assert "tokens" in first_segment
         assert len(first_segment["tokens"]) > 0, "First segment should have tokens"
-        
+
         first_token = first_segment["tokens"][0]
         assert "timestamps" in first_token
         assert "from" in first_token["timestamps"]
@@ -163,15 +182,15 @@ class TestLyricVideoVocalsPipeline:
     def test_pipeline_config_values(self) -> None:
         """Pipeline step configs have correct values."""
         pipeline = get_pipeline("lyric-video-vocals")
-        
+
         isolate_vocals = pipeline.get_step("isolate_vocals")
         assert isolate_vocals is not None
         assert isolate_vocals.config.get("tool") == "demucs"
-        
+
         transcribe_timed = pipeline.get_step("transcribe_timed")
         assert transcribe_timed is not None
         assert transcribe_timed.config.get("generate_word_level") is True
-        
+
         generate_lyric_video = pipeline.get_step("generate_lyric_video")
         assert generate_lyric_video is not None
         assert generate_lyric_video.config.get("font_size") == 48
@@ -186,20 +205,20 @@ class TestLyricVideoAlignedPipeline:
     TEST_LYRICS = """When you walk through the door .
 Hearts hit the floor.
 The sky fades to north and south
-Your lips, those words, these days, your mouth. 
+Your lips, those words, these days, your mouth.
 
 Five times by design,
-I'm still alive . 
+I'm still alive .
 
-I hold your shadow, and feel your heat, become the centre and all you need. 
-Blaze alive , 
-Shrink and hold. 
+I hold your shadow, and feel your heat, become the centre and all you need.
+Blaze alive ,
+Shrink and hold.
 Hearts stop. Worlds end. Prime control.
 
-Five times by design. I'm still alive . 
+Five times by design. I'm still alive .
 
 When you walk through the door. Hearts hit the floor. The sky fades from north to south…
-Your lips, those words, these days, your mouth. 
+Your lips, those words, these days, your mouth.
 
 Five times by design. I'm still alive."""
 
@@ -226,7 +245,6 @@ Five times by design. I'm still alive."""
             "generate_lyric_video",
         ]
 
-
     def test_aligned_pipeline_step_dependencies(self) -> None:
         """Aligned pipeline steps have correct input dependencies."""
         pipeline = get_pipeline("lyric-video-aligned")
@@ -237,7 +255,9 @@ Five times by design. I'm still alive."""
 
         align_lyrics = pipeline.get_step("align_lyrics")
         assert align_lyrics is not None
-        assert align_lyrics.input_from == "isolate_vocals"  # Aligns to isolated vocals (better accuracy)
+        assert (
+            align_lyrics.input_from == "isolate_vocals"
+        )  # Aligns to isolated vocals (better accuracy)
 
         extract_audio = pipeline.get_step("extract_audio")
         assert extract_audio is not None
@@ -245,12 +265,14 @@ Five times by design. I'm still alive."""
 
         generate_lyric_video = pipeline.get_step("generate_lyric_video")
         assert generate_lyric_video is not None
-        assert generate_lyric_video.input_from == "extract_audio"  # Uses extracted audio (with music)
+        assert (
+            generate_lyric_video.input_from == "extract_audio"
+        )  # Uses extracted audio (with music)
 
     def test_lyrics_file_reading(self, tmp_path: Path) -> None:
         """Test that lyrics file can be read and used by align_lyrics step."""
-        from infomux.steps.align_lyrics import AlignLyricsStep
         from infomux.steps import StepError
+        from infomux.steps.align_lyrics import AlignLyricsStep
 
         # Create a test lyrics file
         lyrics_file = tmp_path / "lyrics.txt"
@@ -262,7 +284,7 @@ Five times by design. I'm still alive."""
 
         # Test that step can find and read lyrics file when provided
         step = AlignLyricsStep(lyrics_file=str(lyrics_file))
-        
+
         # The step should be able to find the lyrics file
         # We can't fully execute without aeneas, but we can test the file reading logic
         # by checking that it raises an appropriate error when aeneas is not available
@@ -271,8 +293,9 @@ Five times by design. I'm still alive."""
             step.execute(audio_file, tmp_path)
         except StepError as e:
             # Should fail on aeneas not found, not on lyrics file not found
-            assert "lyrics file not found" not in str(e).lower(), \
+            assert "lyrics file not found" not in str(e).lower(), (
                 f"Should have found lyrics file, but got: {e}"
+            )
             # It's OK if it fails on aeneas - that means it found the lyrics file
 
         # Test that step can find lyrics.txt in output_dir automatically
@@ -281,8 +304,9 @@ Five times by design. I'm still alive."""
             step2.execute(audio_file, tmp_path)
         except StepError as e:
             # Should fail on aeneas not found, not on lyrics file not found
-            assert "lyrics file not found" not in str(e).lower(), \
+            assert "lyrics file not found" not in str(e).lower(), (
                 f"Should have auto-found lyrics.txt, but got: {e}"
+            )
 
         # Test that step raises error when lyrics file doesn't exist
         step3 = AlignLyricsStep(lyrics_file="nonexistent.txt")
@@ -298,16 +322,18 @@ Five times by design. I'm still alive."""
             step4.execute(audio_file, tmp_path)
         assert "empty" in str(exc_info.value).lower()
 
-    def test_aligned_pipeline_with_lyrics_file(self, tmp_path: Path, monkeypatch) -> None:
+    def test_aligned_pipeline_with_lyrics_file(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
         """
         Test aligned pipeline execution with official lyrics file.
-        
+
         This is a functional test that requires:
         - Real audio file (recommend using first 60 seconds: ffmpeg -i input.mp3 -t 60 -c copy sample.mp3)
         - Lyrics file with official lyrics matching the audio
         - ffmpeg, aeneas, demucs installed
         - Sufficient time to run (may take several minutes for full song)
-        
+
         This test demonstrates using official lyrics for more accurate timing than transcription.
         Example: "These Days" by Dogtablet
         """
@@ -317,6 +343,7 @@ Five times by design. I'm still alive."""
 
         # Check if aeneas is available
         import sys
+
         try:
             result = subprocess.run(
                 [sys.executable, "-m", "aeneas.tools.execute_task", "--help"],
@@ -326,13 +353,13 @@ Five times by design. I'm still alive."""
             )
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pytest.skip("aeneas not installed - required for forced alignment")
-        
+
         if result.returncode != 0:
             pytest.skip("aeneas not available - required for forced alignment")
-        
+
         # Use test fixture audio file (60-second sample)
         audio_file = Path(__file__).parent / "fixtures" / "test-audio-sample.mp3"
-        
+
         if not audio_file.exists():
             pytest.skip(f"Test audio file not found: {audio_file}")
 
@@ -340,88 +367,106 @@ Five times by design. I'm still alive."""
         # But keep the whisper model path pointing to the real model location
         monkeypatch.setenv("INFOMUX_DATA_DIR", str(tmp_path))
         import os
+
         if "INFOMUX_WHISPER_MODEL" not in os.environ:
             # Set the whisper model path explicitly so it's found even with custom DATA_DIR
-            model_path = Path.home() / ".local" / "share" / "infomux" / "models" / "whisper" / "ggml-base.en.bin"
+            model_path = (
+                Path.home()
+                / ".local"
+                / "share"
+                / "infomux"
+                / "models"
+                / "whisper"
+                / "ggml-base.en.bin"
+            )
             if model_path.exists():
                 monkeypatch.setenv("INFOMUX_WHISPER_MODEL", str(model_path))
             else:
                 pytest.skip("Whisper model not found - required for integration test")
-        
+
         # Create job
         from infomux.job import InputFile
+
         input_file = InputFile.from_path(audio_file)
         job = JobEnvelope.create(input_file=input_file)
-        
+
         # Get pipeline
         pipeline = get_pipeline("lyric-video-aligned")
-        
+
         # Create run directory
         run_dir = tmp_path / "runs" / job.id
         run_dir.mkdir(parents=True)
-        
+
         # Copy input file to run directory
         run_input = run_dir / audio_file.name
         shutil.copy2(audio_file, run_input)
         job.input.path = str(run_input)
-        
+
         # Create lyrics file in run directory
         lyrics_file = run_dir / "lyrics.txt"
         lyrics_file.write_text(self.TEST_LYRICS, encoding="utf-8")
-        
+
         # Update pipeline step config to use lyrics file
         align_step = pipeline.get_step("align_lyrics")
         if align_step:
             align_step.config["lyrics_file"] = str(lyrics_file)
-        
+
         # Run pipeline
         success = run_pipeline(
             job=job,
             run_dir=run_dir,
             pipeline=pipeline,
         )
-        
+
         # Verify pipeline completed successfully
         assert success, f"Pipeline failed. Check job: {job.id}"
-        
+
         # Verify all steps completed
         assert len(job.steps) == 4, f"Expected 4 steps, got {len(job.steps)}"
         for step in job.steps:
             assert step.status == "completed", f"Step {step.name} failed: {step.error}"
-        
+
         # Verify outputs exist
-        assert (run_dir / "audio_vocals_only.wav").exists(), "isolate_vocals should create audio_vocals_only.wav"
-        assert (run_dir / "transcript.json").exists(), "align_lyrics should create transcript.json"
-        assert (run_dir / "audio_full.wav").exists(), "extract_audio should create audio_full.wav"
-        
+        assert (run_dir / "audio_vocals_only.wav").exists(), (
+            "isolate_vocals should create audio_vocals_only.wav"
+        )
+        assert (run_dir / "transcript.json").exists(), (
+            "align_lyrics should create transcript.json"
+        )
+        assert (run_dir / "audio_full.wav").exists(), (
+            "extract_audio should create audio_full.wav"
+        )
+
         # Find lyric video output
         video_files = list(run_dir.glob("*_lyric_video.mp4"))
         assert len(video_files) > 0, "generate_lyric_video should create lyric video"
-        
+
         # Verify transcript.json has word-level timestamps matching official lyrics
         with open(run_dir / "transcript.json", encoding="utf-8", errors="replace") as f:
             transcript_data = json.load(f)
-        
+
         assert "transcription" in transcript_data
         transcription = transcript_data["transcription"]
         assert len(transcription) > 0, "transcript.json should have transcription data"
-        
+
         # Verify first segment has tokens with timestamps
         first_segment = transcription[0]
         assert "tokens" in first_segment
         assert len(first_segment["tokens"]) > 0, "First segment should have tokens"
-        
+
         first_token = first_segment["tokens"][0]
         assert "timestamps" in first_token
         assert "from" in first_token["timestamps"]
         assert "to" in first_token["timestamps"]
-        
+
         # Verify lyrics text matches (first few words)
         transcript_text = " ".join(
-            token["text"].strip() for segment in transcription
+            token["text"].strip()
+            for segment in transcription
             for token in segment.get("tokens", [])
         )
         # Check that first words from lyrics appear in transcript
         first_lyrics_words = " ".join(self.TEST_LYRICS.split()[:5]).lower()
-        assert first_lyrics_words.lower() in transcript_text.lower(), \
+        assert first_lyrics_words.lower() in transcript_text.lower(), (
             f"Transcript should contain lyrics. First words: {first_lyrics_words}"
+        )

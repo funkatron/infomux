@@ -4,8 +4,6 @@ Test that word positioning stays within video bounds.
 
 from __future__ import annotations
 
-import pytest
-
 from infomux.steps.generate_lyric_video import (
     GenerateLyricVideoStep,
     PositionedWord,
@@ -19,7 +17,7 @@ class TestPositioningBounds:
     def test_y_positions_stay_within_bounds(self) -> None:
         """
         CRITICAL: Y positions must stay within video height.
-        
+
         This test ensures words don't go off-screen vertically.
         """
         # Create many words that would cause line wrapping
@@ -94,7 +92,7 @@ class TestPositioningBounds:
         # Overlapping words should be on same line (same Y)
         # Check if words overlap in time
         for i, pw1 in enumerate(positioned):
-            for j, pw2 in enumerate(positioned[i+1:], i+1):
+            for j, pw2 in enumerate(positioned[i + 1 :], i + 1):
                 # Check if they overlap in time
                 overlap = not (
                     pw1.word.end_ms <= pw2.word.start_ms
@@ -161,7 +159,7 @@ class TestPositioningBounds:
     def test_many_words_with_gaps(self) -> None:
         """
         Test with many words that have gaps (like real-world scenario).
-        
+
         This simulates the actual error case where words have gaps in timing.
         """
         # Create words with some gaps (simulating missing words)
@@ -175,7 +173,7 @@ class TestPositioningBounds:
                 time += 1500  # 1.5 second gap
             elif i == 137:
                 time += 24000  # 24 second gap
-            
+
             words.append(
                 WordEntry(
                     text=f"word{i}",
@@ -195,7 +193,9 @@ class TestPositioningBounds:
         assert len(positioned) == len(words), "All words should be positioned"
 
         for pw in positioned:
-            assert 0 <= pw.x < video_width, f"X {pw.x} out of bounds for '{pw.word.text}'"
+            assert 0 <= pw.x < video_width, (
+                f"X {pw.x} out of bounds for '{pw.word.text}'"
+            )
             assert step.font_size <= pw.y <= video_height - step.font_size, (
                 f"Y {pw.y} out of bounds for '{pw.word.text}' "
                 f"(font_size={step.font_size}, height={video_height})"

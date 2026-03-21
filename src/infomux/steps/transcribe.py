@@ -88,11 +88,14 @@ class TranscribeStep:
         # Build whisper-cli command
         cmd = [
             str(tools.whisper_cli),
-            "-m", str(tools.whisper_model),
-            "-f", str(input_path),
-            "-of", str(output_prefix),  # Output file prefix
-            "-otxt",                     # Plain text output
-            "-np",                       # No progress (quiet)
+            "-m",
+            str(tools.whisper_model),
+            "-f",
+            str(input_path),
+            "-of",
+            str(output_prefix),  # Output file prefix
+            "-otxt",  # Plain text output
+            "-np",  # No progress (quiet)
         ]
 
         logger.debug("running: %s", " ".join(cmd))

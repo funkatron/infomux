@@ -136,7 +136,9 @@ def execute(args: Namespace) -> int:
 
     # Require at least one filter
     if not any([args.orphaned, args.status, args.older_than]):
-        logger.error("at least one filter is required: --orphaned, --status, or --older-than")
+        logger.error(
+            "at least one filter is required: --orphaned, --status, or --older-than"
+        )
         return 1
 
     runs_dir = get_runs_dir()
@@ -212,7 +214,9 @@ def execute(args: Namespace) -> int:
                 if args.status:
                     reason_parts.append(f"status: {job.status}")
                 if older_than_delta and age is not None:
-                    reason_parts.append(f"older than {args.older_than} (age: {age.days}d)")
+                    reason_parts.append(
+                        f"older than {args.older_than} (age: {age.days}d)"
+                    )
                 if not reason_parts:
                     reason_parts.append("matched filters")
                 runs_to_delete.append((run_id, ", ".join(reason_parts)))
@@ -220,7 +224,9 @@ def execute(args: Namespace) -> int:
             except Exception as e:
                 # If we can't load the job, it might be corrupted
                 if args.orphaned:
-                    runs_to_delete.append((run_id, f"orphaned (corrupted job.json: {e})"))
+                    runs_to_delete.append(
+                        (run_id, f"orphaned (corrupted job.json: {e})")
+                    )
                 else:
                     logger.debug("skipping %s: could not load job: %s", run_id, e)
 

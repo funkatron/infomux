@@ -81,7 +81,11 @@ def _generate_report(data: RunData) -> str:
     artifacts = data.job_json.get("artifacts", [])
     if artifacts:
         # Filter for video files
-        video_files = [a for a in artifacts if Path(a).suffix.lower() in {".mp4", ".mov", ".avi", ".mkv"}]
+        video_files = [
+            a
+            for a in artifacts
+            if Path(a).suffix.lower() in {".mp4", ".mov", ".avi", ".mkv"}
+        ]
         if video_files:
             lines.append("---")
             lines.append("")

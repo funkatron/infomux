@@ -9,13 +9,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from infomux.steps import StepError
 from infomux.steps.transcribe_timed import (
-    TRANSCRIPT_TIMED_FILENAME,
     TranscribeTimedStep,
     _detect_model_type,
     run,
 )
-from infomux.steps import StepError
 
 
 class TestDetectModelType:
@@ -111,8 +110,12 @@ class TestTranscribeTimedStep:
                 mock_run.return_value = MagicMock(returncode=0)
 
                 # Create expected output files
-                (tmp_path / "transcript.srt").write_text("1\n00:00:00,000 --> 00:00:01,000\nHello")
-                (tmp_path / "transcript.vtt").write_text("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello")
+                (tmp_path / "transcript.srt").write_text(
+                    "1\n00:00:00,000 --> 00:00:01,000\nHello"
+                )
+                (tmp_path / "transcript.vtt").write_text(
+                    "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello"
+                )
                 (tmp_path / "transcript.json").write_text('{"text": "Hello"}')
 
                 step = TranscribeTimedStep()
@@ -143,8 +146,12 @@ class TestTranscribeTimedStep:
                 mock_run.return_value = MagicMock(returncode=0)
 
                 # Create all output files
-                (tmp_path / "transcript.srt").write_text("1\n00:00:00,000 --> 00:00:01,000\nHello")
-                (tmp_path / "transcript.vtt").write_text("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello")
+                (tmp_path / "transcript.srt").write_text(
+                    "1\n00:00:00,000 --> 00:00:01,000\nHello"
+                )
+                (tmp_path / "transcript.vtt").write_text(
+                    "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello"
+                )
                 (tmp_path / "transcript.json").write_text('{"text": "Hello"}')
 
                 step = TranscribeTimedStep()
@@ -197,8 +204,12 @@ class TestRunFunction:
             with patch("infomux.steps.transcribe_timed.subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0)
 
-                (tmp_path / "transcript.srt").write_text("1\n00:00:00,000 --> 00:00:01,000\nTest")
-                (tmp_path / "transcript.vtt").write_text("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nTest")
+                (tmp_path / "transcript.srt").write_text(
+                    "1\n00:00:00,000 --> 00:00:01,000\nTest"
+                )
+                (tmp_path / "transcript.vtt").write_text(
+                    "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nTest"
+                )
                 (tmp_path / "transcript.json").write_text('{"text": "Test"}')
 
                 result = run(input_file, tmp_path)

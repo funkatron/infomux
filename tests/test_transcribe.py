@@ -9,12 +9,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from infomux.steps import StepError
 from infomux.steps.transcribe import (
     TRANSCRIPT_FILENAME,
     TranscribeStep,
     run,
 )
-from infomux.steps import StepError
 
 
 class TestTranscribeStep:

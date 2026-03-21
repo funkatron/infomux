@@ -70,7 +70,11 @@ class ExtractAudioStep:
         # Skip extraction if audio already exists (e.g., from isolate_vocals)
         if output_path.exists():
             size = output_path.stat().st_size
-            logger.info("audio already exists: %s (%d bytes), skipping extraction", output_path.name, size)
+            logger.info(
+                "audio already exists: %s (%d bytes), skipping extraction",
+                output_path.name,
+                size,
+            )
             return [output_path]
 
         logger.info("extracting audio: %s -> %s", input_path.name, output_path.name)
@@ -78,12 +82,16 @@ class ExtractAudioStep:
         # Build ffmpeg command
         cmd = [
             str(tools.ffmpeg),
-            "-y",                   # Overwrite without asking
-            "-i", str(input_path),  # Input file
-            "-vn",                  # No video
-            "-ac", "1",             # Mono
-            "-ar", "16000",         # 16kHz sample rate
-            "-c:a", "pcm_s16le",    # 16-bit PCM
+            "-y",  # Overwrite without asking
+            "-i",
+            str(input_path),  # Input file
+            "-vn",  # No video
+            "-ac",
+            "1",  # Mono
+            "-ar",
+            "16000",  # 16kHz sample rate
+            "-c:a",
+            "pcm_s16le",  # 16-bit PCM
             str(output_path),
         ]
 

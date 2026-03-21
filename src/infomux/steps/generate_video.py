@@ -136,7 +136,9 @@ class GenerateVideoStep:
             audio_duration = self._get_audio_duration(tools.ffmpeg, audio_path)
             logger.debug("audio duration: %.2f seconds", audio_duration)
         except StepError as e:
-            logger.warning("Could not determine audio duration: %s. Using -shortest fallback.", e)
+            logger.warning(
+                "Could not determine audio duration: %s. Using -shortest fallback.", e
+            )
             # Continue with duration=None, will use -shortest in command
 
         # Output filename
@@ -145,7 +147,9 @@ class GenerateVideoStep:
         logger.info(
             "generating video from audio: %s (background: %s)",
             audio_path.name,
-            self.background_image.name if self.background_image else f"solid {self.background_color}",
+            self.background_image.name
+            if self.background_image
+            else f"solid {self.background_color}",
         )
 
         cmd = self._build_command(
@@ -208,9 +212,12 @@ class GenerateVideoStep:
 
         cmd = [
             str(ffprobe),
-            "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "json",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "json",
             str(audio_path),
         ]
 
@@ -233,7 +240,12 @@ class GenerateVideoStep:
 
             return duration
 
-        except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, ValueError) as e:
+        except (
+            subprocess.CalledProcessError,
+            json.JSONDecodeError,
+            KeyError,
+            ValueError,
+        ) as e:
             # Re-raise as StepError so caller can handle fallback
             raise StepError(
                 self.name,
@@ -265,28 +277,40 @@ class GenerateVideoStep:
             # Use solid color background
             if duration is not None:
                 # Generate video of the exact audio length
-                cmd.extend([
-                    "-f", "lavfi",
-                    "-i", f"color=c={self.background_color}:s={self.video_size}:d={duration}",
-                ])
+                cmd.extend(
+                    [
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        f"color=c={self.background_color}:s={self.video_size}:d={duration}",
+                    ]
+                )
             else:
                 # Fallback: infinite stream, will use -shortest
-                cmd.extend([
-                    "-f", "lavfi",
-                    "-i", f"color=c={self.background_color}:s={self.video_size}",
-                ])
+                cmd.extend(
+                    [
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        f"color=c={self.background_color}:s={self.video_size}",
+                    ]
+                )
             video_input = "[1:v]"
             input_count = 2
 
         # Add subtitle file as input for soft subtitle stream
         cmd.extend(["-i", str(subs)])
-        subtitle_input_idx = input_count  # Subtitle is input at this index (2 for color, 2 for image)
+        subtitle_input_idx = (
+            input_count  # Subtitle is input at this index (2 for color, 2 for image)
+        )
 
         # Build subtitle filter
         # Use absolute path and escape properly for ffmpeg
         subs_abs = subs.resolve()
         # Escape colons, backslashes, and single quotes for ffmpeg filter
-        subs_escaped = str(subs_abs).replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+        subs_escaped = (
+            str(subs_abs).replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+        )
         sub_filter = f"subtitles='{subs_escaped}'"
 
         # Add optional styling
@@ -317,25 +341,37 @@ class GenerateVideoStep:
         # Audio: from audio input (0)
         # Subtitles: from subtitle input (2) - soft, toggleable subtitles
         # Result: Both burned-in subtitles (always visible) AND soft subtitle stream (toggleable)
-        cmd.extend([
-            "-map", "0:a",  # Map audio from input 0
-            "-map", "1:v",  # Map video from input 1 (will be filtered with burned-in subs)
-            f"-map", f"{subtitle_input_idx}:s",  # Map subtitles from subtitle input (soft subs)
-            "-vf", vf,  # Apply video filter (burns in subtitles on video)
-        ])
+        cmd.extend(
+            [
+                "-map",
+                "0:a",  # Map audio from input 0
+                "-map",
+                "1:v",  # Map video from input 1 (will be filtered with burned-in subs)
+                "-map",
+                f"{subtitle_input_idx}:s",  # Map subtitles from subtitle input (soft subs)
+                "-vf",
+                vf,  # Apply video filter (burns in subtitles on video)
+            ]
+        )
 
         # Only use -shortest if we couldn't determine duration
         if duration is None:
             cmd.append("-shortest")  # End when shortest input ends (audio)
 
         # Add encoding options
-        cmd.extend([
-            "-c:a", "aac",  # Encode audio as AAC for MP4
-            "-b:a", "192k",  # Audio bitrate
-            "-c:s", "mov_text",  # Subtitle codec for MP4 (soft subtitles - toggleable)
-            "-metadata:s:s:0", "language=eng",  # Set subtitle language
-            str(output),
-        ])
+        cmd.extend(
+            [
+                "-c:a",
+                "aac",  # Encode audio as AAC for MP4
+                "-b:a",
+                "192k",  # Audio bitrate
+                "-c:s",
+                "mov_text",  # Subtitle codec for MP4 (soft subtitles - toggleable)
+                "-metadata:s:s:0",
+                "language=eng",  # Set subtitle language
+                str(output),
+            ]
+        )
 
         return cmd
 
@@ -365,7 +401,11 @@ def run(
     # Convert background_image string to Path if provided
     bg_image_path = None
     if background_image:
-        bg_image_path = Path(background_image) if isinstance(background_image, str) else background_image
+        bg_image_path = (
+            Path(background_image)
+            if isinstance(background_image, str)
+            else background_image
+        )
 
     step = GenerateVideoStep(
         background_image=bg_image_path,

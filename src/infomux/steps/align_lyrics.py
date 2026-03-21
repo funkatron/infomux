@@ -45,6 +45,7 @@ OUTPUT_FILENAME = TRANSCRIPT_JSON_FILENAME
 def _check_stable_ts_available() -> bool:
     """Check if stable-ts is available."""
     import importlib.util
+
     return importlib.util.find_spec("stable_whisper") is not None
 
 
@@ -78,10 +79,14 @@ class AlignLyricsStep:
     """
 
     name: str = "align_lyrics"
-    lyrics_file: str | Path | None = None  # Path to lyrics text file (if None, looks for lyrics.txt in output_dir)
+    lyrics_file: str | Path | None = (
+        None  # Path to lyrics text file (if None, looks for lyrics.txt in output_dir)
+    )
     language: str = "eng"  # Language code for alignment
     backend: AlignmentBackend = "auto"  # Which backend to use (auto, stable-ts, aeneas)
-    model: str = "base"  # Whisper model for stable-ts (tiny, base, small, medium, large)
+    model: str = (
+        "base"  # Whisper model for stable-ts (tiny, base, small, medium, large)
+    )
 
     def execute(self, input_path: Path, output_dir: Path) -> list[Path]:
         """
@@ -99,13 +104,13 @@ class AlignLyricsStep:
         """
         # Find lyrics file
         lyrics_path = None
-        
+
         # If lyrics_file is provided in config, use it
         if self.lyrics_file:
             # Handle both string and Path types
             lyrics_file_str = str(self.lyrics_file)
             lyrics_path = Path(lyrics_file_str)
-            
+
             # If relative path, try relative to output_dir first, then current working directory
             if not lyrics_path.is_absolute():
                 # Try in output_dir first
@@ -116,10 +121,12 @@ class AlignLyricsStep:
                     # Use as-is if it exists relative to current directory
                     lyrics_path = lyrics_path.resolve()
                 else:
-                    raise StepError(self.name, f"lyrics file not found: {self.lyrics_file}")
+                    raise StepError(
+                        self.name, f"lyrics file not found: {self.lyrics_file}"
+                    )
             elif not lyrics_path.exists():
                 raise StepError(self.name, f"lyrics file not found: {lyrics_path}")
-        
+
         # If not found yet, look for common lyrics file names in output_dir
         if lyrics_path is None:
             for name in ["lyrics.txt", "lyrics", "official_lyrics.txt"]:
@@ -127,7 +134,7 @@ class AlignLyricsStep:
                 if candidate.exists():
                     lyrics_path = candidate
                     break
-        
+
         if lyrics_path is None:
             raise StepError(
                 self.name,
@@ -138,7 +145,9 @@ class AlignLyricsStep:
 
         # Read lyrics text
         try:
-            lyrics_text = lyrics_path.read_text(encoding="utf-8", errors="replace").strip()
+            lyrics_text = lyrics_path.read_text(
+                encoding="utf-8", errors="replace"
+            ).strip()
             if not lyrics_text:
                 raise StepError(self.name, "lyrics file is empty")
         except Exception as e:
@@ -157,7 +166,7 @@ class AlignLyricsStep:
                 raise StepError(
                     self.name,
                     "No alignment backend available. Install stable-ts (uv pip install stable-ts) "
-                    "or aeneas (requires Python 3.11)."
+                    "or aeneas (requires Python 3.11).",
                 )
 
         # Use the selected backend
@@ -185,7 +194,7 @@ class AlignLyricsStep:
         except ImportError:
             raise StepError(
                 self.name,
-                "stable-ts not installed. Install via: uv pip install stable-ts"
+                "stable-ts not installed. Install via: uv pip install stable-ts",
             )
 
         logger.info("using stable-ts backend with model: %s", self.model)
@@ -222,7 +231,9 @@ class AlignLyricsStep:
             word_count = sum(len(seg.words) for seg in result.segments)
             logger.info(
                 "aligned lyrics: %s (%d bytes, %d words)",
-                output_path.name, size, word_count
+                output_path.name,
+                size,
+                word_count,
             )
             return [output_path]
 
@@ -231,9 +242,7 @@ class AlignLyricsStep:
                 raise
             raise StepError(self.name, f"stable-ts alignment failed: {e}")
 
-    def _convert_stable_ts_to_transcript_json(
-        self, result, output_path: Path
-    ) -> None:
+    def _convert_stable_ts_to_transcript_json(self, result, output_path: Path) -> None:
         """
         Convert stable-ts WhisperResult to transcript.json format.
 
@@ -241,6 +250,7 @@ class AlignLyricsStep:
             result: stable_whisper.WhisperResult object.
             output_path: Path to write transcript.json.
         """
+
         def format_timestamp(seconds: float) -> str:
             """Format seconds as HH:MM:SS,mmm"""
             ms = int(seconds * 1000)
@@ -285,7 +295,8 @@ class AlignLyricsStep:
         total_words = sum(len(seg.get("tokens", [])) for seg in transcription)
         logger.debug(
             "converted stable-ts result to transcript.json: %d segments, %d words",
-            len(transcription), total_words
+            len(transcription),
+            total_words,
         )
 
     def _align_with_aeneas(
@@ -308,23 +319,29 @@ class AlignLyricsStep:
         # MPLAIN: paragraphs separated by blank lines, sentences on separate lines
         # For lyrics, treat each line as a sentence, group stanzas as paragraphs
         lines = [line.strip() for line in lyrics_text.split("\n") if line.strip()]
-        mplain_text = "\n".join(lines)  # Each line is a sentence, blank lines separate paragraphs
+        mplain_text = "\n".join(
+            lines
+        )  # Each line is a sentence, blank lines separate paragraphs
 
         # Convert audio to a format aeneas can read (44.1kHz mono 16-bit PCM)
         # aeneas prefers higher sample rates and may have issues with 16kHz
         tools = get_tool_paths()
         if not tools.ffmpeg:
             raise StepError(self.name, "ffmpeg not found")
-        
+
         # Create a temporary converted audio file for aeneas
         temp_audio = output_dir / "audio_for_alignment.wav"
         convert_cmd = [
             str(tools.ffmpeg),
             "-y",
-            "-i", str(input_path),
-            "-ac", "1",  # Mono
-            "-ar", "44100",  # 44.1kHz (aeneas prefers this)
-            "-c:a", "pcm_s16le",  # 16-bit PCM
+            "-i",
+            str(input_path),
+            "-ac",
+            "1",  # Mono
+            "-ar",
+            "44100",  # 44.1kHz (aeneas prefers this)
+            "-c:a",
+            "pcm_s16le",  # 16-bit PCM
             str(temp_audio),
         ]
 
@@ -365,6 +382,7 @@ class AlignLyricsStep:
         # Use word-level alignment with non-speech masking for music
         # Use macOS built-in TTS if available, otherwise fall back to espeak
         import platform
+
         if platform.system() == "Darwin":
             tts_engine = "macos"  # Use macOS built-in TTS (no espeak needed)
         else:
@@ -449,7 +467,9 @@ class AlignLyricsStep:
             size = output_path.stat().st_size
             logger.info(
                 "aligned lyrics: %s (%d bytes, %d words)",
-                output_path.name, size, len(lyrics_text.split())
+                output_path.name,
+                size,
+                len(lyrics_text.split()),
             )
             return [output_path]
 
@@ -457,7 +477,7 @@ class AlignLyricsStep:
             raise StepError(
                 self.name,
                 "aeneas not found. Requires Python 3.11. "
-                "Install via: uv pip install numpy && uv pip install aeneas"
+                "Install via: uv pip install numpy && uv pip install aeneas",
             )
         except subprocess.SubprocessError as e:
             raise StepError(self.name, f"subprocess error: {e}")
@@ -477,16 +497,14 @@ class AlignLyricsStep:
             with open(syncmap_path, encoding="utf-8") as f:
                 syncmap_data = json.load(f)
         except Exception as e:
-            raise StepError(
-                self.name, f"failed to parse aeneas syncmap: {e}"
-            )
+            raise StepError(self.name, f"failed to parse aeneas syncmap: {e}")
 
         # Extract fragments from syncmap
         fragments = syncmap_data.get("fragments", [])
-        
+
         # Check if fragments have children (multilevel/word-level alignment)
         has_children = any(frag.get("children") for frag in fragments)
-        
+
         # Build transcript.json structure
         transcription = []
         current_segment = {
@@ -519,26 +537,28 @@ class AlignLyricsStep:
                     else:
                         # Two levels: sentence -> word
                         word_fragments.append(child)
-            
+
             # Use word fragments directly
             fragments = word_fragments
-            logger.debug("using multilevel alignment: %d word fragments", len(fragments))
+            logger.debug(
+                "using multilevel alignment: %d word fragments", len(fragments)
+            )
 
         # Process fragments - each fragment may contain one or more words
         for fragment in fragments:
             # Get text from fragment (from 'lines' field)
             fragment_lines = fragment.get("lines", [])
             fragment_text = " ".join(fragment_lines).strip()
-            
+
             if not fragment_text:
                 continue
-            
+
             # Split fragment text into words
             words_in_fragment = fragment_text.split()
-            
+
             begin_time = fragment.get("begin", "0.000")
             end_time = fragment.get("end", "0.000")
-            
+
             # Convert seconds to milliseconds
             try:
                 begin_ms = int(float(begin_time) * 1000)
@@ -546,34 +566,36 @@ class AlignLyricsStep:
             except (ValueError, TypeError):
                 logger.warning("invalid timing: begin=%s, end=%s", begin_time, end_time)
                 continue
-            
+
             # If fragment has multiple words, split timing proportionally
             if len(words_in_fragment) > 1:
                 duration_ms = end_ms - begin_ms
                 time_per_word = duration_ms / len(words_in_fragment)
-                
+
                 for i, word_text in enumerate(words_in_fragment):
                     word_begin_ms = begin_ms + int(i * time_per_word)
                     word_end_ms = begin_ms + int((i + 1) * time_per_word)
-                    
+
                     # Last word gets the exact end time
                     if i == len(words_in_fragment) - 1:
                         word_end_ms = end_ms
-                    
+
                     token = {
-                        "text": f" {word_text}" if i > 0 else word_text,  # Leading space for word boundaries
+                        "text": f" {word_text}"
+                        if i > 0
+                        else word_text,  # Leading space for word boundaries
                         "timestamps": {
                             "from": format_timestamp(word_begin_ms),
                             "to": format_timestamp(word_end_ms),
                         },
                     }
-                    
+
                     current_segment["tokens"].append(token)
                     current_segment["text"] += word_text + " "
             else:
                 # Single word fragment
                 word_text = words_in_fragment[0] if words_in_fragment else fragment_text
-                
+
                 token = {
                     "text": f" {word_text}",  # Leading space indicates word boundary
                     "timestamps": {
@@ -581,10 +603,10 @@ class AlignLyricsStep:
                         "to": format_timestamp(end_ms),
                     },
                 }
-                
+
                 current_segment["tokens"].append(token)
                 current_segment["text"] += word_text + " "
-            
+
             # Update segment end time
             current_segment["end"] = format_timestamp(end_ms)
 
@@ -602,7 +624,11 @@ class AlignLyricsStep:
             json.dump(transcript_data, f, indent=2, ensure_ascii=False)
 
         total_words = sum(len(seg.get("tokens", [])) for seg in transcription)
-        logger.debug("converted syncmap to transcript.json: %d segments, %d words", len(transcription), total_words)
+        logger.debug(
+            "converted syncmap to transcript.json: %d segments, %d words",
+            len(transcription),
+            total_words,
+        )
 
 
 def run(
@@ -644,9 +670,9 @@ def run(
             outputs=outputs,
             duration_seconds=duration,
             model_info={
-                "backend": backend if backend != "auto" else (
-                    "stable-ts" if _check_stable_ts_available() else "aeneas"
-                ),
+                "backend": backend
+                if backend != "auto"
+                else ("stable-ts" if _check_stable_ts_available() else "aeneas"),
                 "model": model if backend in ("auto", "stable-ts") else None,
             },
         )

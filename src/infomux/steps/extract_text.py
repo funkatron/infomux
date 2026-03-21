@@ -125,7 +125,16 @@ def is_image_file(file_path: Path) -> bool:
     """
     # Check extension
     ext = file_path.suffix.lower()
-    image_extensions = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".tif", ".webp"}
+    image_extensions = {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".bmp",
+        ".tiff",
+        ".tif",
+        ".webp",
+    }
     return ext in image_extensions
 
 
@@ -217,8 +226,9 @@ def _try_easyocr(image_path: Path) -> str | None:
         use_gpu = False
         try:
             import torch
+
             # Check for Metal (Apple Silicon)
-            if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                 use_gpu = True
                 logger.debug("EasyOCR using GPU acceleration (Metal/Apple Silicon)")
             # Check for CUDA (Linux/Windows)
@@ -230,17 +240,17 @@ def _try_easyocr(image_path: Path) -> str | None:
         except ImportError:
             # torch not available, use CPU
             logger.debug("EasyOCR using CPU (PyTorch not available)")
-        
+
         # Initialize reader (cached globally for performance)
         # Note: First call loads model (~100MB), subsequent calls reuse it
         # gpu=True enables Metal on Apple Silicon or CUDA if available
-        reader = easyocr.Reader(['en'], gpu=use_gpu)
+        reader = easyocr.Reader(["en"], gpu=use_gpu)
         results = reader.readtext(str(image_path))
 
         # Extract text from results (filter by confidence)
         # Format: [(bbox, text, confidence), ...]
         lines = []
-        for (bbox, text, confidence) in results:
+        for bbox, text, confidence in results:
             if confidence >= 0.5 and text.strip() and len(text.strip()) > 2:
                 lines.append(text.strip())
 
@@ -266,8 +276,9 @@ def _try_tesseract(image_path: Path) -> str | None:
     Returns:
         Extracted text if Tesseract is available and succeeds, None otherwise.
     """
-    from infomux.config import get_tool_paths
     import subprocess
+
+    from infomux.config import get_tool_paths
 
     tools = get_tool_paths()
     if not tools.tesseract:
@@ -288,7 +299,8 @@ def _try_tesseract(image_path: Path) -> str | None:
                     str(tools.tesseract),
                     str(image_path),
                     "stdout",
-                    "--psm", str(psm),
+                    "--psm",
+                    str(psm),
                 ]
                 result = subprocess.run(
                     cmd,
@@ -308,7 +320,11 @@ def _try_tesseract(image_path: Path) -> str | None:
 
         if all_lines:
             text = "\n".join(sorted(all_lines))  # Sort for consistency
-            logger.debug("Tesseract extracted %d unique lines using %d PSM modes", len(all_lines), len(psm_modes))
+            logger.debug(
+                "Tesseract extracted %d unique lines using %d PSM modes",
+                len(all_lines),
+                len(psm_modes),
+            )
             return text
         return None
     except Exception as e:
@@ -419,9 +435,7 @@ class ExtractTextStep:
             output_path.write_text(text, encoding="utf-8")
 
             text_size = len(text)
-            logger.info(
-                "extracted text: %s (%d chars)", output_path.name, text_size
-            )
+            logger.info("extracted text: %s (%d chars)", output_path.name, text_size)
 
             # Log preview
             preview_lines = text.split("\n")[:3]
@@ -433,9 +447,7 @@ class ExtractTextStep:
             return [output_path]
 
         except UnicodeDecodeError as e:
-            raise StepError(
-                self.name, f"failed to decode file as UTF-8: {e}"
-            )
+            raise StepError(self.name, f"failed to decode file as UTF-8: {e}")
         except Exception as e:
             raise StepError(self.name, f"failed to extract text: {e}")
 

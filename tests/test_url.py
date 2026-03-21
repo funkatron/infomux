@@ -113,9 +113,7 @@ class TestInputFileWithUrl:
         assert input_file.original_url == "https://example.com/video.mp4"
         assert input_file.path == str(test_file)
 
-    def test_input_file_json_roundtrip_with_url(
-        self, tmp_path: Path
-    ) -> None:
+    def test_input_file_json_roundtrip_with_url(self, tmp_path: Path) -> None:
         """InputFile with URL round-trips through JSON."""
         from infomux.job import JobEnvelope
 

@@ -110,7 +110,9 @@ def _is_word_boundary(text: str) -> tuple[bool, str]:
         return (True, "")
 
     # Skip Unicode replacement characters and other problematic characters
-    if clean_text == "\ufffd" or (len(clean_text) == 1 and unicodedata.category(clean_text) == "So"):
+    if clean_text == "\ufffd" or (
+        len(clean_text) == 1 and unicodedata.category(clean_text) == "So"
+    ):
         # Unicode replacement character or other symbols that might be encoding artifacts
         return (True, "")
 
@@ -151,7 +153,9 @@ def _generate_word_level_srt(json_path: Path, output_path: Path) -> None:
             with open(json_path, encoding="utf-8", errors="replace") as f:
                 data = json.load(f)
         except json.JSONDecodeError as json_err:
-            logger.error("Failed to parse transcript.json after encoding recovery: %s", json_err)
+            logger.error(
+                "Failed to parse transcript.json after encoding recovery: %s", json_err
+            )
             return
     except json.JSONDecodeError as e:
         logger.error("Failed to parse transcript.json: %s", e)
@@ -206,15 +210,21 @@ def _generate_word_level_srt(json_path: Path, output_path: Path) -> None:
 
             if is_boundary:
                 # Save current word if we have one
-                if current_word and word_start_ms is not None and word_end_ms is not None:
+                if (
+                    current_word
+                    and word_start_ms is not None
+                    and word_end_ms is not None
+                ):
                     word_text = current_word.strip()
                     if word_text:
-                        entries.append({
-                            "num": entry_num,
-                            "from": word_start_ms,
-                            "to": word_end_ms,
-                            "text": word_text,
-                        })
+                        entries.append(
+                            {
+                                "num": entry_num,
+                                "from": word_start_ms,
+                                "to": word_end_ms,
+                                "text": word_text,
+                            }
+                        )
                         entry_num += 1
                     current_word = ""
                     word_start_ms = None
@@ -223,12 +233,14 @@ def _generate_word_level_srt(json_path: Path, output_path: Path) -> None:
                 # If it's punctuation, create a separate entry for it
                 if clean_text in [",", ".", "!", "?", ";", ":", "-"]:
                     # Punctuation gets very short duration
-                    entries.append({
-                        "num": entry_num,
-                        "from": from_ms,
-                        "to": min(from_ms + 50, to_ms),  # Max 50ms for punctuation
-                        "text": clean_text,
-                    })
+                    entries.append(
+                        {
+                            "num": entry_num,
+                            "from": from_ms,
+                            "to": min(from_ms + 50, to_ms),  # Max 50ms for punctuation
+                            "text": clean_text,
+                        }
+                    )
                     entry_num += 1
                 else:
                     # Start new word
@@ -246,12 +258,14 @@ def _generate_word_level_srt(json_path: Path, output_path: Path) -> None:
         if current_word and word_start_ms is not None and word_end_ms is not None:
             word_text = current_word.strip()
             if word_text:
-                entries.append({
-                    "num": entry_num,
-                    "from": word_start_ms,
-                    "to": word_end_ms,
-                    "text": word_text,
-                })
+                entries.append(
+                    {
+                        "num": entry_num,
+                        "from": word_start_ms,
+                        "to": word_end_ms,
+                        "text": word_text,
+                    }
+                )
                 entry_num += 1
 
     # Write SRT file
@@ -298,7 +312,9 @@ def _generate_word_level_vtt(json_path: Path, output_path: Path) -> None:
             with open(json_path, encoding="utf-8", errors="replace") as f:
                 data = json.load(f)
         except json.JSONDecodeError as json_err:
-            logger.error("Failed to parse transcript.json after encoding recovery: %s", json_err)
+            logger.error(
+                "Failed to parse transcript.json after encoding recovery: %s", json_err
+            )
             return
     except json.JSONDecodeError as e:
         logger.error("Failed to parse transcript.json: %s", e)
@@ -352,14 +368,20 @@ def _generate_word_level_vtt(json_path: Path, output_path: Path) -> None:
 
             if is_boundary:
                 # Save current word if we have one
-                if current_word and word_start_ms is not None and word_end_ms is not None:
+                if (
+                    current_word
+                    and word_start_ms is not None
+                    and word_end_ms is not None
+                ):
                     word_text = current_word.strip()
                     if word_text:
-                        entries.append({
-                            "from": word_start_ms,
-                            "to": word_end_ms,
-                            "text": word_text,
-                        })
+                        entries.append(
+                            {
+                                "from": word_start_ms,
+                                "to": word_end_ms,
+                                "text": word_text,
+                            }
+                        )
                     current_word = ""
                     word_start_ms = None
                     word_end_ms = None
@@ -367,11 +389,13 @@ def _generate_word_level_vtt(json_path: Path, output_path: Path) -> None:
                 # If it's punctuation, create a separate entry for it
                 if clean_text in [",", ".", "!", "?", ";", ":", "-"]:
                     # Punctuation gets very short duration
-                    entries.append({
-                        "from": from_ms,
-                        "to": min(from_ms + 50, to_ms),  # Max 50ms for punctuation
-                        "text": clean_text,
-                    })
+                    entries.append(
+                        {
+                            "from": from_ms,
+                            "to": min(from_ms + 50, to_ms),  # Max 50ms for punctuation
+                            "text": clean_text,
+                        }
+                    )
                 else:
                     # Start new word
                     word_start_ms = from_ms
@@ -388,11 +412,13 @@ def _generate_word_level_vtt(json_path: Path, output_path: Path) -> None:
         if current_word and word_start_ms is not None and word_end_ms is not None:
             word_text = current_word.strip()
             if word_text:
-                entries.append({
-                    "from": word_start_ms,
-                    "to": word_end_ms,
-                    "text": word_text,
-                })
+                entries.append(
+                    {
+                        "from": word_start_ms,
+                        "to": word_end_ms,
+                        "text": word_text,
+                    }
+                )
 
     # Write VTT file
     with open(output_path, "w", encoding="utf-8") as f:
@@ -498,14 +524,18 @@ class TranscribeTimedStep:
         # Build command with DTW for word-level timestamps
         cmd = [
             str(tools.whisper_cli),
-            "-m", str(tools.whisper_model),
-            "-f", str(input_path),
-            "-of", str(output_prefix),
-            "-osrt",      # SRT subtitles
-            "-ovtt",      # VTT subtitles
-            "-ojf",       # Full JSON with timestamps
-            "-dtw", model_type,  # Enable DTW for word-level alignment
-            "-np",        # No progress output
+            "-m",
+            str(tools.whisper_model),
+            "-f",
+            str(input_path),
+            "-of",
+            str(output_prefix),
+            "-osrt",  # SRT subtitles
+            "-ovtt",  # VTT subtitles
+            "-ojf",  # Full JSON with timestamps
+            "-dtw",
+            model_type,  # Enable DTW for word-level alignment
+            "-np",  # No progress output
         ]
 
         logger.debug("running: %s", " ".join(cmd))

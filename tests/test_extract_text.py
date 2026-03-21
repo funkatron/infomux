@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from infomux.steps import StepError
 from infomux.steps.extract_text import (
     ExtractTextStep,
     HTMLTextExtractor,
@@ -15,7 +16,6 @@ from infomux.steps.extract_text import (
     is_html_file,
     run,
 )
-from infomux.steps import StepError
 
 
 class TestHTMLTextExtractor:

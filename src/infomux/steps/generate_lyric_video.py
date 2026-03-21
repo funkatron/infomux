@@ -68,7 +68,9 @@ class GenerateLyricVideoStep:
     name: str = "generate_lyric_video"
     background_color: str = "black"  # Background color (solid color, or gradient like "gradient:purple:black")
     background_image: Path | None = None  # Optional background image (scaled to fit)
-    background_gradient: str | None = None  # Gradient spec: "vertical:color1:color2" or "horizontal:color1:color2"
+    background_gradient: str | None = (
+        None  # Gradient spec: "vertical:color1:color2" or "horizontal:color1:color2"
+    )
     video_size: str = "1920x1080"  # Width x Height
     font_name: str = "Arial"  # Font family name
     font_file: Path | None = None  # Optional explicit font file path
@@ -126,15 +128,19 @@ class GenerateLyricVideoStep:
         # Line-level subtitles (transcript.srt) - normal captions
         line_srt_path = output_dir / "transcript.srt"
         if not line_srt_path.exists():
-            logger.warning("transcript.srt not found, line-level subtitles will be skipped")
+            logger.warning(
+                "transcript.srt not found, line-level subtitles will be skipped"
+            )
             line_srt_path = None
         else:
             logger.info("found transcript.srt for line-level subtitles")
-        
+
         # Word-level subtitles (transcript_words.srt) - word-by-word captions
         word_srt_path = output_dir / "transcript_words.srt"
         if not word_srt_path.exists():
-            logger.warning("transcript_words.srt not found, word-level subtitles will be skipped")
+            logger.warning(
+                "transcript_words.srt not found, word-level subtitles will be skipped"
+            )
             word_srt_path = None
         else:
             logger.info("found transcript_words.srt for word-level subtitles")
@@ -149,12 +155,12 @@ class GenerateLyricVideoStep:
             )
 
         logger.info("parsed %d words from transcript.json", len(words))
-        
+
         # Check for potential timing issues
         if words:
             first_word_start = words[0].start_ms / 1000.0
             last_word_end = words[-1].end_ms / 1000.0
-            
+
             # Check for large gaps in timing
             gaps = []
             for i in range(len(words) - 1):
@@ -163,27 +169,29 @@ class GenerateLyricVideoStep:
                 gap_duration = gap_end - gap_start
                 if gap_duration > 2.0:  # Gaps longer than 2 seconds
                     gaps.append((gap_start, gap_end, gap_duration))
-            
+
             logger.info(
                 "word timing range: %.3f - %.3f seconds (%.2f seconds total)",
                 first_word_start,
                 last_word_end,
                 last_word_end - first_word_start,
             )
-            
+
             if gaps:
                 logger.warning(
                     "found %d large timing gaps (>2s) where no words will appear:",
-                    len(gaps)
+                    len(gaps),
                 )
                 for gap_start, gap_end, duration in gaps[:5]:  # Show first 5 gaps
                     logger.warning(
                         "  gap: %.2f - %.2f seconds (%.2f seconds, no words)",
-                        gap_start, gap_end, duration
+                        gap_start,
+                        gap_end,
+                        duration,
                     )
                 if len(gaps) > 5:
                     logger.warning("  ... and %d more gaps", len(gaps) - 5)
-            
+
             # Check if first word starts at 0 (might indicate timing offset)
             if first_word_start > 0.1:
                 logger.debug(
@@ -196,7 +204,7 @@ class GenerateLyricVideoStep:
         try:
             audio_duration = self._get_audio_duration(tools.ffmpeg, input_path)
             logger.debug("audio duration: %.2f seconds", audio_duration)
-            
+
             # Warn if word timings extend beyond audio duration
             if words and audio_duration:
                 last_word_end = words[-1].end_ms / 1000.0
@@ -216,7 +224,7 @@ class GenerateLyricVideoStep:
 
         # Calculate positions for words
         positioned_words = self._calculate_positions(words, width, height)
-        
+
         # Log positioning statistics for debugging
         if positioned_words:
             y_positions = [pw.y for pw in positioned_words]
@@ -231,10 +239,11 @@ class GenerateLyricVideoStep:
                 max(x_positions),
                 lines_used,
             )
-            
+
             # Check for words that might be off-screen
             off_screen = [
-                pw for pw in positioned_words
+                pw
+                for pw in positioned_words
                 if pw.y < self.font_size or pw.y > height - self.font_size
             ]
             if off_screen:
@@ -248,8 +257,10 @@ class GenerateLyricVideoStep:
         # Generate word images with alpha transparency
         word_images_dir = output_dir / "word_images"
         word_images_dir.mkdir(exist_ok=True)
-        
-        logger.info("generating %d word images with alpha transparency", len(positioned_words))
+
+        logger.info(
+            "generating %d word images with alpha transparency", len(positioned_words)
+        )
         word_image_paths = self._generate_word_images(
             tools.ffmpeg,
             positioned_words,
@@ -357,7 +368,9 @@ class GenerateLyricVideoStep:
             return (True, "")
 
         # Skip Unicode replacement characters and other problematic characters
-        if clean_text == "\ufffd" or (len(clean_text) == 1 and unicodedata.category(clean_text) == "So"):
+        if clean_text == "\ufffd" or (
+            len(clean_text) == 1 and unicodedata.category(clean_text) == "So"
+        ):
             # Unicode replacement character or other symbols that might be encoding artifacts
             return (True, "")
 
@@ -557,7 +570,9 @@ class GenerateLyricVideoStep:
             base_y = video_height // 2
 
         # Calculate max lines that fit on screen
-        max_lines_up = (base_y - self.font_size) // line_height if base_y > self.font_size else 0
+        max_lines_up = (
+            (base_y - self.font_size) // line_height if base_y > self.font_size else 0
+        )
         max_lines_down = (video_height - base_y - self.font_size) // line_height
         max_total_lines = max_lines_up + max_lines_down + 1  # +1 for center line
 
@@ -602,9 +617,7 @@ class GenerateLyricVideoStep:
                         y = self.font_size
                     elif y > video_height - self.font_size:
                         y = video_height - self.font_size
-                    positioned.append(
-                        PositionedWord(word=word, x=x, y=y, line=pw.line)
-                    )
+                    positioned.append(PositionedWord(word=word, x=x, y=y, line=pw.line))
                     # Update rightmost position for this line
                     line_rightmost[pw.line] = x + word_width
                     placed = True
@@ -621,19 +634,23 @@ class GenerateLyricVideoStep:
                             test_line = 0
                         else:
                             test_line = sign * line_offset
-                        
+
                         # Check if this line has room
                         line_right_x = line_rightmost.get(test_line, 0)
                         if line_right_x + word_width <= video_width:
                             best_line = test_line
                             break
-                    
+
                     if best_line is not None:
                         break
-                
+
                 # If no line has room, use the line with most space
                 if best_line is None:
-                    best_line = min(line_rightmost.keys(), key=lambda l: line_rightmost.get(l, 0), default=0)
+                    best_line = min(
+                        line_rightmost.keys(),
+                        key=lambda line_num: line_rightmost.get(line_num, 0),
+                        default=0,
+                    )
                     # If even the emptiest line doesn't fit, start a new line
                     if line_rightmost.get(best_line, 0) + word_width > video_width:
                         # Find next unused line number
@@ -644,7 +661,11 @@ class GenerateLyricVideoStep:
                                 break
                         else:
                             # All lines used, use the one with least content
-                            best_line = min(line_rightmost.keys(), key=lambda l: line_rightmost.get(l, 0), default=0)
+                            best_line = min(
+                                line_rightmost.keys(),
+                                key=lambda line_num: line_rightmost.get(line_num, 0),
+                                default=0,
+                            )
 
                 x = line_rightmost.get(best_line, 0)
                 y = base_y + (best_line * line_height)
@@ -653,7 +674,7 @@ class GenerateLyricVideoStep:
                     y = self.font_size
                 elif y > video_height - self.font_size:
                     y = video_height - self.font_size
-                
+
                 positioned.append(PositionedWord(word=word, x=x, y=y, line=best_line))
                 line_rightmost[best_line] = x + word_width
                 line_numbers_used.add(best_line)
@@ -671,17 +692,17 @@ class GenerateLyricVideoStep:
         for line_num, line_words in lines.items():
             if not line_words:
                 continue
-            
+
             # Sort words on this line by x position
             line_words.sort(key=lambda pw: pw.x)
-            
+
             # Calculate total width of all words on this line
             # (including spacing between words)
             first_word = line_words[0]
             last_word = line_words[-1]
             last_word_width = len(last_word.word.text) * char_width
             total_line_width = last_word.x + last_word_width - first_word.x
-            
+
             # Calculate center offset to center the line
             center_x = video_width // 2
             line_center_x = first_word.x + (total_line_width // 2)
@@ -699,7 +720,7 @@ class GenerateLyricVideoStep:
             word_width_est = len(pw.word.text) * char_width
             if new_x + word_width_est > video_width:
                 new_x = max(0, video_width - word_width_est)
-            
+
             # Create new PositionedWord with centered x
             centered_positioned.append(
                 PositionedWord(word=pw.word, x=new_x, y=pw.y, line=pw.line)
@@ -719,32 +740,32 @@ class GenerateLyricVideoStep:
             Sanitized text safe for filenames.
         """
         import re
-        
+
         # Remove Unicode replacement characters
         text = text.replace("\ufffd", "")
-        
+
         # Replace spaces with underscores
         text = text.replace(" ", "_")
-        
+
         # Remove or replace unsafe filename characters
         # Keep alphanumeric, underscores, hyphens, and basic Unicode letters
         # Remove: / \ : * ? " < > |
-        text = re.sub(r'[<>:"/\\|?*]', '', text)
-        
+        text = re.sub(r'[<>:"/\\|?*]', "", text)
+
         # Remove control characters
-        text = re.sub(r'[\x00-\x1f\x7f]', '', text)
-        
+        text = re.sub(r"[\x00-\x1f\x7f]", "", text)
+
         # Limit length
         if len(text) > max_length:
             text = text[:max_length]
-        
+
         # Remove leading/trailing dots and spaces (Windows issue)
-        text = text.strip('. ')
-        
+        text = text.strip(". ")
+
         # If empty after sanitization, use a fallback
         if not text:
             text = "word"
-        
+
         return text
 
     def _escape_text_for_drawtext(self, text: str) -> str:
@@ -760,7 +781,7 @@ class GenerateLyricVideoStep:
         # Remove Unicode replacement characters (from encoding recovery)
         # These can cause FFmpeg filter parsing issues
         text = text.replace("\ufffd", "")  # Unicode replacement character
-        
+
         # Escape special characters for FFmpeg drawtext
         # Order matters: escape backslashes FIRST, then other characters
         # Backslashes need to be escaped (do this first!)
@@ -806,7 +827,7 @@ class GenerateLyricVideoStep:
             # Use image as background (loop it to match audio duration)
             img_path = Path(self.background_image)
             logger.info("using background image: %s", img_path.name)
-            
+
             # Loop image and scale/crop to fit video size
             input_args = ["-loop", "1", "-i", str(img_path)]
             # Scale to cover, then crop to exact size
@@ -831,7 +852,7 @@ class GenerateLyricVideoStep:
 
             if direction:
                 logger.info("using %s gradient: %s -> %s", direction, color1, color2)
-                
+
                 # Generate gradient using geq filter
                 # For vertical gradient: darker at top, lighter at bottom
                 if direction == "vertical":
@@ -850,7 +871,7 @@ class GenerateLyricVideoStep:
                     # Radial gradient from center
                     gradient_filter = (
                         f"gradients=s={width}x{height}:c0={color1}:c1={color2}:"
-                        f"x0={width//2}:y0={height//2}:x1=0:y1=0:type=radial{duration_str}"
+                        f"x0={width // 2}:y0={height // 2}:x1=0:y1=0:type=radial{duration_str}"
                     )
                 else:
                     # Default to vertical
@@ -858,12 +879,14 @@ class GenerateLyricVideoStep:
                         f"gradients=s={width}x{height}:c0={color1}:c1={color2}:"
                         f"x0=0:y0=0:x1=0:y1={height}{duration_str}"
                     )
-                
+
                 input_args = ["-f", "lavfi", "-i", gradient_filter]
                 return input_args, ""
 
         # Default: solid color
-        color_filter = f"color=c={self.background_color}:s={self.video_size}{duration_str}"
+        color_filter = (
+            f"color=c={self.background_color}:s={self.video_size}{duration_str}"
+        )
         input_args = ["-f", "lavfi", "-i", color_filter]
         return input_args, ""
 
@@ -889,34 +912,43 @@ class GenerateLyricVideoStep:
             List of (PositionedWord, image_path) tuples.
         """
         word_image_paths: list[tuple[PositionedWord, Path]] = []
-        
+
         # Sanitize font name for filename
         font_name_safe = self._sanitize_filename(self.font_name, max_length=20)
-        
+
         for i, pw in enumerate(positioned_words):
             # Sanitize word text for filename
             word_text_safe = self._sanitize_filename(pw.word.text, max_length=30)
-            
+
             # Generate image filename with phrase, font, and size
             # Format: word_0001_{phrase}_{font}_{size}.png
-            image_path = output_dir / f"word_{i:04d}_{word_text_safe}_{font_name_safe}_{self.font_size}.png"
-            
+            image_path = (
+                output_dir
+                / f"word_{i:04d}_{word_text_safe}_{font_name_safe}_{self.font_size}.png"
+            )
+
             # Escape text for FFmpeg
             text_escaped = self._escape_text_for_drawtext(pw.word.text)
-            
+
             # Build font specification
             if self.font_file and self.font_file.exists():
-                font_path = str(self.font_file.resolve()).replace("\\", "\\\\").replace("'", "\\'")
+                font_path = (
+                    str(self.font_file.resolve())
+                    .replace("\\", "\\\\")
+                    .replace("'", "\\'")
+                )
                 font_spec = f"fontfile='{font_path}'"
             else:
-                font_name_escaped = self.font_name.replace("'", "\\'").replace(":", "\\:")
+                font_name_escaped = self.font_name.replace("'", "\\'").replace(
+                    ":", "\\:"
+                )
                 font_spec = f"font='{font_name_escaped}'"
-            
+
             # Estimate word dimensions (add padding for safety)
             char_width = int(self.font_size * 0.6)
             word_width = len(pw.word.text) * char_width + 20  # Add padding
             word_height = self.font_size + 20  # Add padding
-            
+
             # Build ffmpeg command to generate word image
             # Use color source with alpha=0 (transparent) and drawtext on it
             drawtext_filter = (
@@ -926,19 +958,25 @@ class GenerateLyricVideoStep:
                 f"fontcolor={self.font_color}:"
                 f"x=10:y=10"  # Position text in image (with padding)
             )
-            
+
             cmd = [
                 str(ffmpeg),
                 "-y",
-                "-loglevel", "warning",  # Show warnings and errors, suppress info/stats
-                "-f", "lavfi",
-                "-i", f"color=c=black@0:s={word_width}x{word_height}:d=0.1",  # Transparent background (alpha=0)
-                "-vf", drawtext_filter,
-                "-frames:v", "1",  # Single frame
-                "-pix_fmt", "rgba",  # RGBA format for alpha transparency (no background)
+                "-loglevel",
+                "warning",  # Show warnings and errors, suppress info/stats
+                "-f",
+                "lavfi",
+                "-i",
+                f"color=c=black@0:s={word_width}x{word_height}:d=0.1",  # Transparent background (alpha=0)
+                "-vf",
+                drawtext_filter,
+                "-frames:v",
+                "1",  # Single frame
+                "-pix_fmt",
+                "rgba",  # RGBA format for alpha transparency (no background)
                 str(image_path),
             ]
-            
+
             try:
                 result = subprocess.run(
                     cmd,
@@ -946,7 +984,7 @@ class GenerateLyricVideoStep:
                     text=True,
                     check=False,
                 )
-                
+
                 if result.returncode != 0:
                     logger.warning(
                         "Failed to generate word image for '%s': %s",
@@ -954,17 +992,19 @@ class GenerateLyricVideoStep:
                         result.stderr[-200:] if result.stderr else "unknown error",
                     )
                     continue
-                
+
                 if image_path.exists():
                     word_image_paths.append((pw, image_path))
                     logger.debug("generated word image: %s", image_path.name)
                 else:
                     logger.warning("Word image not created: %s", image_path)
-                    
+
             except Exception as e:
-                logger.warning("Error generating word image for '%s': %s", pw.word.text, e)
+                logger.warning(
+                    "Error generating word image for '%s': %s", pw.word.text, e
+                )
                 continue
-        
+
         logger.info("generated %d word images", len(word_image_paths))
         return word_image_paths
 
@@ -1000,7 +1040,8 @@ class GenerateLyricVideoStep:
         cmd = [
             str(ffmpeg),
             "-y",  # Overwrite output
-            "-loglevel", "warning",  # Show warnings and errors, suppress info/stats
+            "-loglevel",
+            "warning",  # Show warnings and errors, suppress info/stats
             "-nostats",  # Don't print encoding statistics (prevents broken pipe errors)
         ]
 
@@ -1044,20 +1085,20 @@ class GenerateLyricVideoStep:
         # Build overlay filter chain
         # Start with background video
         filter_chains = []
-        
+
         # Add background filter prefix if needed (for image backgrounds)
         if bg_filter_prefix:
             filter_chains.append(bg_filter_prefix.rstrip(";"))
             current_input = "[bg]"
         else:
             current_input = "[1:v]"
-        
+
         # Overlay each word image at the right time and position
         for i, (pw, img_path) in enumerate(word_image_paths):
             img_input_idx = 2 + i  # Image input index (after audio=0, background=1)
             start_sec = pw.word.start_ms / 1000.0
             end_sec = pw.word.end_ms / 1000.0
-            
+
             # Log first few words for timing debugging
             if i < 10:
                 logger.debug(
@@ -1071,7 +1112,7 @@ class GenerateLyricVideoStep:
                     pw.word.start_ms,
                     pw.word.end_ms,
                 )
-            
+
             # Check for overlapping words at the same time
             if i > 0:
                 prev_pw = word_image_paths[i - 1][0]
@@ -1084,7 +1125,7 @@ class GenerateLyricVideoStep:
                         start_sec,
                         prev_end,
                     )
-            
+
             # Build overlay filter with enable expression
             # overlay=x=X:y=Y:format=auto:enable='between(t,START,END)'
             # format=auto is required to properly blend RGBA images with alpha
@@ -1095,23 +1136,27 @@ class GenerateLyricVideoStep:
                 f"overlay={pw.x}:{pw.y}:format=auto:"
                 f"enable='between(t,{start_sec:.3f},{end_sec:.3f})'"
             )
-            
+
             if i == len(word_image_paths) - 1:
                 # Last overlay outputs to [out]
                 filter_chains.append(f"{overlay_filter}[out]")
             else:
                 # Intermediate overlays use [vN] labels
-                next_label = f"[v{i+1}]"
+                next_label = f"[v{i + 1}]"
                 filter_chains.append(f"{overlay_filter}{next_label}")
                 current_input = next_label
-        
+
         filter_chain = ";".join(filter_chains)
-        
+
         # Write filter to file
         filter_file = output.parent / "filter_complex.txt"
         filter_file.write_text(filter_chain, encoding="utf-8")
-        logger.debug("wrote overlay filter complex to file: %s (%d chars)", filter_file.name, len(filter_chain))
-        
+        logger.debug(
+            "wrote overlay filter complex to file: %s (%d chars)",
+            filter_file.name,
+            len(filter_chain),
+        )
+
         # Log filter for debugging (truncate if too long)
         if len(filter_chain) > 500:
             logger.debug("filter complex (truncated): %s...", filter_chain[:500])
@@ -1175,8 +1220,10 @@ class GenerateLyricVideoStep:
 
         # Add subtitle codec and metadata for all subtitle tracks
         if line_subtitle_idx is not None or word_subtitle_idx is not None:
-            cmd.extend(["-c:s", "mov_text"])  # Subtitle codec for MP4 (soft subtitles - toggleable)
-            
+            cmd.extend(
+                ["-c:s", "mov_text"]
+            )  # Subtitle codec for MP4 (soft subtitles - toggleable)
+
             # Set metadata for line-level subtitles (track 0)
             if line_subtitle_idx is not None:
                 cmd.extend(
@@ -1189,7 +1236,7 @@ class GenerateLyricVideoStep:
                         "default",  # Make line-level subtitles default
                     ]
                 )
-            
+
             # Set metadata for word-level subtitles (track 1)
             if word_subtitle_idx is not None:
                 track_num = 1 if line_subtitle_idx is not None else 0
@@ -1229,7 +1276,9 @@ class GenerateLyricVideoStep:
 
         # Build font specification
         if self.font_file and self.font_file.exists():
-            font_path = str(self.font_file.resolve()).replace("\\", "\\\\").replace("'", "\\'")
+            font_path = (
+                str(self.font_file.resolve()).replace("\\", "\\\\").replace("'", "\\'")
+            )
             font_spec = f"fontfile='{font_path}'"
         else:
             # Escape font name
@@ -1244,10 +1293,10 @@ class GenerateLyricVideoStep:
         # FFmpeg's filter parser should handle commas inside single-quoted strings correctly
         # But to be safe, let's use the 'if' parameter which is an alias for 'enable'
         # and ensure proper quoting
-        
+
         # Use if='between(t,START,END)' - the if parameter should handle this better
         enable_expr = f"between(t,{start_sec:.3f},{end_sec:.3f})"
-        
+
         filter_parts = [
             font_spec,
             f"text='{text_escaped}'",
@@ -1288,7 +1337,8 @@ class GenerateLyricVideoStep:
         cmd = [
             str(ffmpeg),
             "-y",  # Overwrite output
-            "-loglevel", "warning",  # Show warnings and errors, suppress info/stats
+            "-loglevel",
+            "warning",  # Show warnings and errors, suppress info/stats
             "-nostats",  # Don't print encoding statistics (prevents broken pipe errors)
         ]
 
@@ -1341,27 +1391,31 @@ class GenerateLyricVideoStep:
         # Write filter complex to a file to avoid shell quoting/escaping issues
         # This is more reliable for complex filters with many parameters
         filter_file = output.parent / "filter_complex.txt"
-        
+
         # Build filter chain using semicolons with intermediate labels
         filter_chains = []
         current_input = "[1:v]"
-        
+
         for i, filter_str in enumerate(valid_filters):
             if i == len(valid_filters) - 1:
                 # Last filter outputs to [out]
                 filter_chains.append(f"{current_input}{filter_str}[out]")
             else:
                 # Intermediate filters use [vN] labels
-                next_label = f"[v{i+1}]"
+                next_label = f"[v{i + 1}]"
                 filter_chains.append(f"{current_input}{filter_str}{next_label}")
                 current_input = next_label
-        
+
         filter_chain = ";".join(filter_chains)
-        
+
         # Write filter to file
         filter_file.write_text(filter_chain, encoding="utf-8")
-        logger.debug("wrote filter complex to file: %s (%d chars)", filter_file.name, len(filter_chain))
-        
+        logger.debug(
+            "wrote filter complex to file: %s (%d chars)",
+            filter_file.name,
+            len(filter_chain),
+        )
+
         # Log filter for debugging (truncate if too long)
         if len(filter_chain) > 500:
             logger.debug("filter complex (truncated): %s...", filter_chain[:500])
@@ -1505,7 +1559,11 @@ def run(
 
     bg_image_path = None
     if background_image:
-        bg_image_path = Path(background_image) if isinstance(background_image, str) else background_image
+        bg_image_path = (
+            Path(background_image)
+            if isinstance(background_image, str)
+            else background_image
+        )
 
     step = GenerateLyricVideoStep(
         background_color=background_color,
