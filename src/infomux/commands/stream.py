@@ -5,10 +5,12 @@ Uses whisper-stream for live transcription from an audio input device,
 then optionally processes the captured audio through a pipeline.
 
 Usage:
-    infomux stream                      # Capture and transcribe
-    infomux stream --pipeline summarize # Capture, transcribe, summarize
-    infomux stream --device 3           # Use device 3 directly
-    infomux stream --list-devices       # List available devices
+    infomux stream                      # Default input + loopback (when available), transcribe
+    infomux stream --prompt             # Interactive device picker with live meters
+    infomux stream --input 1 --output 2 # Explicit device IDs (see --list-devices)
+    infomux stream --device 3           # Legacy: input only, no loopback (same as older releases)
+    infomux stream --pipeline summarize # After capture, run summarize pipeline
+    infomux stream --list-devices       # List INPUTS and OUTPUTS with IDs
     infomux stream --duration 60        # Stop after 60 seconds
     infomux stream --silence 5          # Stop after 5 seconds of silence
     infomux stream --stop-word "stop"   # Stop when "stop" is detected
@@ -89,8 +91,8 @@ def configure_parser(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--list-devices",
         action="store_true",
-        help="List all available audio input devices with their IDs and exit. "
-        "Use the ID with --device to select a specific microphone.",
+        help="List all available audio input/output devices with their IDs and exit. "
+        "Use IDs with --input/--output to select specific devices.",
     )
     parser.add_argument(
         "--no-save-audio",
@@ -1245,6 +1247,9 @@ def _list_devices() -> int:
         print()
     print("Use: infomux stream --input <id> --output <id>")
     print("Or:  infomux stream --prompt (interactive selection)")
+    print(
+        "Legacy: infomux stream --device <id> selects one input only (no loopback)."
+    )
     print()
     print("Note: To capture system audio, set a loopback device (BlackHole, etc.)")
     print("      as your system output in System Settings > Sound > Output")

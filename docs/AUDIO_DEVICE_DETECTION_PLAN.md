@@ -10,8 +10,9 @@ Enhance the audio device detection system to properly identify devices with both
 - Output-only devices (like Mac Studio Speakers) should appear in OUTPUT list
 - Default device selection should prefer:
   - Non-virtual devices for input (e.g., M2 microphone)
-  - Loopback devices for output (e.g., BlackHole for system audio capture)
+  - Loopback devices for output (e.g., BlackHole 2ch for system audio capture)
 - Safety checks to prevent recording from output-only devices
+- Official recommendation: install loopback via `brew install blackhole-2ch` on macOS.
 
 ## Implementation
 
@@ -55,6 +56,7 @@ Enhance the audio device detection system to properly identify devices with both
 **Loopback Devices (`list_loopback_devices()`):**
 - Returns devices with `direction = "loopback"` OR `is_virtual = True`
 - Used for system audio capture
+- Expected behavior should match BlackHole 2ch semantics for reliable system-audio capture
 
 ### Default Device Selection
 
@@ -87,17 +89,25 @@ Enhance the audio device detection system to properly identify devices with both
 - Live audio meters for all devices
 - Clear markers for device capabilities
 
+**Directional flags vs legacy:**
+- Prefer `--input <id>` / `--output <id>` (IDs from `--list-devices`) for explicit capture routing
+- `--device <id>` remains for backward compatibility: selects a single **input** device only and does **not** enable loopback capture (matches older CLI behavior)
+
 ## Testing
 
 ### Device Detection Tests
-- Verify M2 appears in both input and output lists
-- Verify OWC Thunderbolt appears in both input and output lists
-- Verify Mac Studio Speakers appears only in output list (marked as output-only)
-- Verify BlackHole appears in both lists (marked as loopback)
+- Test baseline assumes official loopback is installed: `brew install blackhole-2ch`.
+- Run `uv run infomux stream --list-devices` on the target machine.
+- Verify `BlackHole 2ch` appears as a loopback-capable device in OUTPUTS (and INPUTS if exposed by host audio stack).
+- Verify at least one dual-capability device appears in both INPUTS and OUTPUTS.
+- Verify output-only devices (if present) appear only in OUTPUTS and are marked `[output-only]`.
+- Verify loopback/virtual devices (if present) are preferred for output capture behavior.
+- Device names are environment-specific; do not require exact hardware labels in assertions.
 
 ### Default Selection Tests
-- Verify default input prefers M2 over BlackHole
-- Verify default output prefers BlackHole over M2
+- Verify default input prefers a non-virtual microphone when available.
+- Verify default output prefers `BlackHole 2ch` when available.
+- If `BlackHole 2ch` is unavailable, treat as setup issue for official loopback validation.
 
 ### Safety Tests
 - Verify recording fails gracefully if only output-only devices selected
@@ -126,6 +136,20 @@ Enhance the audio device detection system to properly identify devices with both
 ## Status
 
 ✅ **Completed** - Feature implemented and tested
+
+## Live Validation
+
+Run this command on a real machine to validate current detection behavior:
+
+```bash
+uv run infomux stream --list-devices
+```
+
+Expected behavior:
+- Shows separate `INPUTS` and `OUTPUTS` sections.
+- Devices with both capabilities appear in both sections.
+- Output-only devices are marked `[output-only]`.
+- Command hint shows explicit directional flags (`--input`, `--output`) and `--prompt`.
 
 ## Future Enhancements
 

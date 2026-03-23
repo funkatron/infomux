@@ -4,7 +4,7 @@ A local-first CLI for transcribing audio/video and capturing voice notes.
 
 **What it does:**
 - Transcribe any audio/video file to text
-- Record voice notes from your microphone with live transcription
+- Record voice notes (default: mic + loopback when available) with live transcription
 - Generate summaries using local LLMs (Ollama)
 - Keep everything on your machine — no cloud, no API keys
 
@@ -13,7 +13,7 @@ A local-first CLI for transcribing audio/video and capturing voice notes.
 infomux run ~/Downloads/episode-42.mp3
 # → ~/.local/share/infomux/runs/run-XXXXXX/transcript.txt
 
-# Record a voice memo with timestamps
+# Record a voice memo with timestamps (default: default input + loopback when available)
 infomux stream --duration 300
 # → audio.wav + transcript.srt/vtt/json
 
@@ -509,16 +509,22 @@ infomux cache external status --json
 
 ### `infomux stream`
 
-Real-time audio capture and transcription from a microphone.
+Real-time audio capture and transcription. By default uses the system default **input** plus a **loopback** device when available (mic + system audio mix). Use `--list-devices` for IDs.
 
 ```bash
-# See available microphones
+# See available input/output devices
 infomux stream --list-devices
 
-# Record with interactive device picker
+# Default capture (no prompts): default input + default loopback when available
 infomux stream
 
-# Use a specific microphone (by ID from --list-devices)
+# Interactive device picker with live meters
+infomux stream --prompt
+
+# Use specific input/output devices (IDs from --list-devices)
+infomux stream --input 1 --output 0
+
+# Legacy: single microphone only, no loopback (older CLI behavior)
 infomux stream --device 2
 
 # 5-minute voice memo
@@ -537,11 +543,20 @@ infomux stream --pipeline summarize
 INFOMUX_OPENAI_API_KEY=sk-... infomux stream --pipeline report-openai
 
 # Meeting notes with auto-silence detection
-infomux stream --device 2 --silence 10 --pipeline summarize
+infomux stream --input 1 --silence 10 --pipeline summarize
 
 # Show available pipelines for stream
 infomux stream --list-pipelines
 ```
+
+**Device detection behavior:**
+- `--list-devices` prints separate **INPUTS** and **OUTPUTS** sections.
+- Devices with both input and output capability appear in both sections.
+- Output-only devices are marked `[output-only]`.
+- Loopback/virtual devices are preferred for system-audio capture.
+- Official recommendation for macOS loopback capture: `brew install blackhole-2ch`.
+- `infomux` expects loopback devices to behave like BlackHole 2ch (stable output capture source).
+- **`--device <id>`** remains for backward compatibility: it picks one **input** device only and does **not** record loopback (same behavior as older releases). Prefer **`--input` / `--output`** for directional capture.
 
 **Stop conditions:**
 - Press `Ctrl+C`
@@ -984,6 +999,18 @@ infomux stream --list-devices
 
 On macOS, you may need to grant Terminal/your IDE microphone access in System Preferences → Privacy & Security → Microphone.
 
+If you want to capture system audio (not just mic input), install BlackHole 2ch and set it as output:
+
+```bash
+brew install blackhole-2ch
+```
+
+Then re-run:
+
+```bash
+infomux stream --list-devices
+```
+
 ### Lyric Video Features (EXPERIMENTAL)
 
 **⚠️ These features are experimental and require additional dependencies not included by default.**
@@ -1125,9 +1152,9 @@ src/infomux/
   - See [Optional Dependencies](#optional-dependencies) for installation
 
 **Streaming:**
-- Real-time audio capture and transcription
+- Real-time audio capture and transcription (default input + loopback when available)
 - Multiple stop conditions (duration, silence, stop-word)
-- Audio device discovery and selection
+- Audio device discovery; **`--input` / `--output`**, **`--prompt`**, or legacy **`--device`**
 
 **Reproducibility:**
 - Model/seed recording for LLM outputs

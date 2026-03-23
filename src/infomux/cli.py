@@ -51,7 +51,7 @@ def _print_parse_tips(argv: list[str]) -> None:
     if not argv or (first_token and first_token.startswith("-")):
         print("\nTry one of these:", file=sys.stderr)
         print("  infomux run input.mp4", file=sys.stderr)
-        print("  infomux stream", file=sys.stderr)
+        print("  infomux stream  # default: mic + loopback when available", file=sys.stderr)
         print("  infomux inspect --list", file=sys.stderr)
         print("  infomux --help", file=sys.stderr)
         return
@@ -115,7 +115,8 @@ Examples:
 
   # Real-time recording and transcription
   infomux stream
-  infomux stream --device 0 --silence 5
+  infomux stream --prompt
+  infomux stream --input 0 --output 1 --silence 5
   infomux stream --pipeline summarize
 
   # Inspect and manage runs
@@ -274,16 +275,24 @@ Examples:
     stream_parser = subparsers.add_parser(
         "stream",
         help="Real-time audio capture and transcription",
-        description="Record from microphone and transcribe in real-time. "
-        "Supports multiple stop conditions: duration, silence detection, or stop "
-        "phrase. "
+        description="Record from audio devices and transcribe in real-time. "
+        "By default uses the system default input plus a loopback device when "
+        "available (for mixed mic + system audio). Use --list-devices for IDs; "
+        "use --input/--output to override. "
+        "Supports stop conditions: duration, silence detection, or stop phrase. "
         "Can run additional pipelines (like summarize) after recording completes.",
         epilog="""
 Examples:
-  # Interactive device selection and recording
+  # Default capture (default input + default loopback when available)
   infomux stream
 
-  # Record from specific device
+  # Interactive device selection with live meters
+  infomux stream --prompt
+
+  # Explicit input and output device IDs (from --list-devices)
+  infomux stream --input 1 --output 2
+
+  # Legacy: single microphone only, no loopback (older CLI behavior)
   infomux stream --device 2
 
   # 5-minute voice memo
@@ -299,9 +308,9 @@ Examples:
   infomux stream --pipeline summarize
 
   # Meeting notes with auto-silence detection
-  infomux stream --device 2 --silence 10 --pipeline summarize
+  infomux stream --input 1 --silence 10 --pipeline summarize
 
-  # List available audio devices
+  # List INPUTS and OUTPUTS with device IDs
   infomux stream --list-devices
 """,
     )
