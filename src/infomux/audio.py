@@ -6,6 +6,7 @@ Uses ffmpeg's avfoundation (macOS) to discover and record from audio devices.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -294,7 +295,7 @@ def build_audio_device_inventory() -> AudioDeviceInventory:
 
     next_id = max((device.id for device in ffmpeg_devices), default=-1) + 1
     output_only_devices: list[AudioDevice] = []
-    for device_name, caps in capabilities.items():
+    for device_name, caps in sorted(capabilities.items(), key=lambda item: item[0]):
         if device_name in devices_by_name:
             continue
         if caps.get("output") and not caps.get("input"):
@@ -426,6 +427,39 @@ def get_device_by_id(device_id: int) -> AudioDevice | None:
         AudioDevice if found, None otherwise.
     """
     return build_audio_device_inventory().devices_by_id.get(device_id)
+
+
+def get_output_device_by_id(device_id: int) -> AudioDevice | None:
+    """Resolve a device shown under OUTPUTS (loopbacks + output-only) by ID."""
+    for device in list_output_devices():
+        if device.id == device_id:
+            return device
+    return None
+
+
+def choose_recon_capture_device() -> AudioDevice | None:
+    """
+    Pick a recordable device from OUTPUTS for recon.
+
+    Prefers an aggregate-style device over BlackHole when both are present.
+    Override with INFOMUX_RECON_CAPTURE (substring match against device name).
+    """
+    devices = list_output_devices()
+    recordable = [d for d in devices if d.has_input]
+    if not recordable:
+        return None
+
+    env_name = os.environ.get("INFOMUX_RECON_CAPTURE", "").strip()
+    if env_name:
+        for d in recordable:
+            if env_name.lower() in d.name.lower() or d.name == env_name:
+                return d
+        return None
+
+    aggregates = [d for d in recordable if "aggregate" in d.name.lower()]
+    if aggregates:
+        return aggregates[0]
+    return recordable[0]
 
 
 def get_audio_levels(

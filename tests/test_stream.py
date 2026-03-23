@@ -15,6 +15,7 @@ import pytest
 from infomux.audio import (
     AudioDevice,
     AudioDeviceInventory,
+    get_output_device_by_id,
     list_audio_devices,
     select_audio_device,
 )
@@ -276,6 +277,35 @@ class TestConfigureParser:
 
         args = parser.parse_args([])
         assert args.language == "en"
+
+
+class TestOutputDeviceLookup:
+    """Tests for output device resolution from OUTPUTS list."""
+
+    @patch("infomux.audio.list_output_devices")
+    def test_resolves_output_only_device(self, mock_list_output_devices):
+        output_only = AudioDevice(
+            id=6,
+            name="infomux-multi-output",
+            direction="output",
+            has_input=False,
+            has_output=True,
+        )
+        mock_list_output_devices.return_value = [output_only]
+
+        resolved = get_output_device_by_id(6)
+
+        assert resolved is not None
+        assert resolved.id == 6
+        assert resolved.name == "infomux-multi-output"
+
+    @patch("infomux.audio.list_output_devices")
+    def test_returns_none_when_output_id_missing(self, mock_list_output_devices):
+        mock_list_output_devices.return_value = [AudioDevice(id=2, name="BlackHole 2ch")]
+
+        resolved = get_output_device_by_id(999)
+
+        assert resolved is None
 
 
 class TestPrintInstructions:

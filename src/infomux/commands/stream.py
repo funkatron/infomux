@@ -34,6 +34,7 @@ from infomux.audio import (
     get_default_loopback,
     get_default_output,
     get_device_by_id,
+    get_output_device_by_id,
     record_audio,
     render_level_meter,
 )
@@ -412,7 +413,7 @@ def execute(args: Namespace) -> int:
                 loopback_devices = []
             elif args.output is not None:
                 # Explicitly specified device ID
-                device = get_device_by_id(args.output)
+                device = get_output_device_by_id(args.output)
                 if not device:
                     logger.error("Output device %d not found", args.output)
                     logger.info("Use --list-devices to see available devices")
@@ -510,6 +511,7 @@ def execute(args: Namespace) -> int:
     # For now, whisper-stream only supports single device
     # If we have multiple devices, we need to record with ffmpeg first, then transcribe
     # If we have a single input device, we can use whisper-stream directly
+    transcript_path: Path | None = None
     use_ffmpeg_recording = len(all_devices) > 1 or len(loopback_devices) > 0
 
     if use_ffmpeg_recording:
@@ -836,7 +838,7 @@ def execute(args: Namespace) -> int:
                         logger.info("Created: %s", artifact.name)
 
     # Add rough transcript if it exists
-    if transcript_path.exists():
+    if transcript_path is not None and transcript_path.exists():
         job.artifacts.append(str(transcript_path))
 
     job.update_status(JobStatus.COMPLETED)
