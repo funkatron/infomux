@@ -60,6 +60,7 @@ dmypy.json
 Thumbs.db
 
 # Project specific
+.local/
 *.log
 tests/fixtures/
 .env
