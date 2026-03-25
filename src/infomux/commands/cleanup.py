@@ -7,10 +7,10 @@ or runs matching specific criteria.
 
 Usage:
     infomux cleanup --dry-run              # Preview what would be deleted
-    infomux cleanup --orphaned             # Delete runs without job.json
-    infomux cleanup --status running       # Delete runs with specific status
-    infomux cleanup --older-than 30d       # Delete runs older than 30 days
-    infomux cleanup --force                # Actually delete (required)
+    infomux cleanup --orphaned             # Preview orphaned runs
+    infomux cleanup --status running       # Preview runs with specific status
+    infomux cleanup --older-than 30d       # Preview runs older than 30 days
+    infomux cleanup --force --status running  # Actually delete matches
 """
 
 from __future__ import annotations
@@ -37,13 +37,13 @@ def configure_parser(parser: ArgumentParser) -> None:
         "--dry-run",
         action="store_true",
         help="Preview what would be deleted without actually deleting. "
-        "Always use this first to see what would be removed. Shows run IDs and reasons.",
+        "This is now the default unless --force is passed. Shows run IDs and reasons.",
     )
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Actually delete runs. Required to perform deletion (unless using --dry-run). "
-        "This is a safety measure to prevent accidental deletion.",
+        help="Actually delete runs instead of previewing them. "
+        "Without --force, cleanup runs in dry-run mode by default.",
     )
     parser.add_argument(
         "--orphaned",
@@ -128,11 +128,7 @@ def execute(args: Namespace) -> int:
     Returns:
         Exit code (0 for success, non-zero for errors).
     """
-    # Require either --dry-run or --force
-    if not args.dry_run and not args.force:
-        logger.error("either --dry-run or --force is required")
-        logger.error("use --dry-run to preview what would be deleted")
-        return 1
+    dry_run = args.dry_run or not args.force
 
     # Require at least one filter
     if not any([args.orphaned, args.status, args.older_than]):
@@ -238,7 +234,7 @@ def execute(args: Namespace) -> int:
     # Sort by run_id for consistent output
     runs_to_delete.sort(key=lambda x: x[0])
 
-    if args.dry_run:
+    if dry_run:
         print(f"Would delete {len(runs_to_delete)} run(s):", file=sys.stdout)
         print()
         for run_id, reason in runs_to_delete:

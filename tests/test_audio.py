@@ -4,12 +4,18 @@ Tests for audio device discovery and classification.
 
 from __future__ import annotations
 
+from pathlib import Path
+from unittest.mock import patch
+
 import pytest
 
 from infomux.audio import (
     AudioDevice,
+    AudioDeviceInventory,
+    build_audio_device_inventory,
     classify_device,
     get_default_input,
+    get_device_by_id,
     get_default_loopback,
     list_input_devices,
     list_loopback_devices,
@@ -49,6 +55,132 @@ class TestDeviceClassification:
         device = AudioDevice(id=0, name="blackhole 16ch")
         classified = classify_device(device)
         assert classified.direction == "loopback"
+
+    @patch("infomux.audio.get_device_capabilities")
+    def test_classify_with_explicit_capabilities_skips_system_profiler(
+        self, mock_capabilities
+    ) -> None:
+        """Explicit capabilities should bypass system_profiler."""
+        classified = classify_device(
+            AudioDevice(id=0, name="Built-in Microphone"),
+            capabilities={"Built-in Microphone": {"input": True, "output": False, "virtual": False}},
+        )
+        assert classified.direction == "input"
+        mock_capabilities.assert_not_called()
+
+
+class TestAudioInventory:
+    """Tests for inventory partitioning."""
+
+    @patch("infomux.audio.find_tool", return_value=Path("/usr/bin/ffmpeg"))
+    @patch(
+        "infomux.audio.get_device_capabilities",
+        return_value={
+            "Built-in Microphone": {"input": True, "output": False, "virtual": False},
+            "BlackHole 2ch": {"input": True, "output": True, "virtual": True},
+            "Mac Studio Speakers": {"input": False, "output": True, "virtual": False},
+        },
+    )
+    @patch(
+        "infomux.audio.subprocess.run",
+        return_value=type(
+            "Result",
+            (),
+            {
+                "stderr": """
+[AVFoundation indev @ 0x123] AVFoundation audio devices:
+[AVFoundation indev @ 0x123] [0] Built-in Microphone
+[AVFoundation indev @ 0x123] [1] BlackHole 2ch
+[in#0] Error opening input
+""",
+            },
+        )(),
+    )
+    def test_build_inventory_partitions_devices(
+        self, mock_run, mock_capabilities, mock_find_tool
+    ) -> None:
+        """Inventory separates recordable inputs, loopbacks, and output-only devices."""
+        inventory = build_audio_device_inventory()
+
+        assert [device.name for device in inventory.recordable_inputs] == ["Built-in Microphone"]
+        assert [device.name for device in inventory.recordable_loopbacks] == ["BlackHole 2ch"]
+        assert [device.name for device in inventory.output_only_devices] == ["Mac Studio Speakers"]
+        assert set(inventory.devices_by_id) == {0, 1}
+
+    @patch("infomux.audio.find_tool", return_value=Path("/usr/bin/ffmpeg"))
+    @patch(
+        "infomux.audio.get_device_capabilities",
+        return_value={
+            "Built-in Microphone": {"input": True, "output": False, "virtual": False},
+        },
+    )
+    @patch(
+        "infomux.audio.subprocess.run",
+        return_value=type(
+            "Result",
+            (),
+            {
+                "stderr": """
+[AVFoundation indev @ 0x123] AVFoundation audio devices:
+[AVFoundation indev @ 0x123] [0] Built-in Microphone
+[AVFoundation indev @ 0x123] [1] USB Podcast Mic
+[in#0] Error opening input
+""",
+            },
+        )(),
+    )
+    def test_build_inventory_keeps_unknown_ffmpeg_inputs_recordable(
+        self, mock_run, mock_capabilities, mock_find_tool
+    ) -> None:
+        """Devices seen by ffmpeg stay selectable even when system_profiler omits them."""
+        inventory = build_audio_device_inventory()
+
+        assert [device.name for device in inventory.recordable_inputs] == [
+            "Built-in Microphone",
+            "USB Podcast Mic",
+        ]
+
+    @patch("infomux.audio.build_audio_device_inventory")
+    def test_get_device_by_id_excludes_output_only_devices(self, mock_inventory) -> None:
+        """Synthetic output-only IDs should not be treated as capturable devices."""
+        mock_inventory.return_value = AudioDeviceInventory(
+            recordable_inputs=[AudioDevice(id=0, name="Built-in Microphone", has_input=True)],
+            recordable_loopbacks=[
+                AudioDevice(
+                    id=1,
+                    name="BlackHole 2ch",
+                    has_input=True,
+                    has_output=True,
+                    direction="loopback",
+                    is_virtual=True,
+                )
+            ],
+            output_only_devices=[
+                AudioDevice(
+                    id=2,
+                    name="Mac Studio Speakers",
+                    has_input=False,
+                    has_output=True,
+                    direction="output",
+                )
+            ],
+            all_devices=[],
+            devices_by_id={
+                0: AudioDevice(id=0, name="Built-in Microphone", has_input=True),
+                1: AudioDevice(
+                    id=1,
+                    name="BlackHole 2ch",
+                    has_input=True,
+                    has_output=True,
+                    direction="loopback",
+                    is_virtual=True,
+                ),
+            },
+        )
+
+        assert get_device_by_id(0) is not None
+        assert get_device_by_id(1) is not None
+        assert get_device_by_id(2) is None
 
 
 class TestDeviceLists:

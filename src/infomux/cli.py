@@ -311,29 +311,27 @@ Examples:
     cleanup_parser = subparsers.add_parser(
         "cleanup",
         help="Remove orphaned or unwanted runs",
-        description="Clean up the runs directory by removing orphaned runs, "
-        "stuck runs, or runs matching specific criteria. "
-        "Always use --dry-run first to preview what would be deleted. Requires "
-        "--force to actually delete.",
+        description="Clean up the runs directory by removing orphaned runs, stuck runs, or runs matching specific criteria. "
+        "Cleanup previews matches by default; pass --force to actually delete them.",
         epilog="""
 Examples:
-  # Preview orphaned runs (always do this first!)
-  infomux cleanup --dry-run --orphaned
+  # Preview orphaned runs (default behavior)
+  infomux cleanup --orphaned
 
   # Delete orphaned runs (no valid job.json)
   infomux cleanup --force --orphaned
 
-  # Delete stuck runs (status: running)
-  infomux cleanup --force --status running
+  # Preview stuck runs (status: running)
+  infomux cleanup --status running
 
   # Delete runs older than 30 days
   infomux cleanup --force --older-than 30d
 
-  # Delete failed runs older than 7 days (with safety check)
-  infomux cleanup --force --status failed --older-than 7d --min-age 1d
+  # Preview failed runs older than 7 days (with safety check)
+  infomux cleanup --status failed --older-than 7d --min-age 1d
 
-  # Combine filters: delete orphaned and stuck runs
-  infomux cleanup --force --orphaned --status running
+  # Combine filters: preview orphaned and stuck runs
+  infomux cleanup --orphaned --status running
 
 Time specifications:
   Use 'd' for days, 'w' for weeks, 'm' for months

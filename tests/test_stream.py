@@ -12,11 +12,18 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from infomux.audio import AudioDevice, list_audio_devices, select_audio_device
+from infomux.audio import (
+    AudioDevice,
+    AudioDeviceInventory,
+    list_audio_devices,
+    select_audio_device,
+)
 from infomux.commands.stream import (
     StreamMonitor,
     _find_saved_audio,
+    _list_devices,
     _print_instructions,
+    interactive_device_selection,
     configure_parser,
 )
 
@@ -304,3 +311,106 @@ class TestPrintInstructions:
 
         captured = capsys.readouterr()
         assert "end session" in captured.err
+
+
+def _make_inventory() -> AudioDeviceInventory:
+    return AudioDeviceInventory(
+        recordable_inputs=[
+            AudioDevice(id=0, name="Studio Mic", has_input=True, has_output=False),
+        ],
+        recordable_loopbacks=[
+            AudioDevice(
+                id=1,
+                name="BlackHole 2ch",
+                direction="loopback",
+                has_input=True,
+                has_output=True,
+                is_virtual=True,
+            ),
+        ],
+        output_only_devices=[
+            AudioDevice(
+                id=2,
+                name="Mac Studio Speakers",
+                direction="output",
+                has_input=False,
+                has_output=True,
+            ),
+        ],
+        all_devices=[],
+        devices_by_id={},
+    )
+
+
+def _finalize_inventory(inventory: AudioDeviceInventory) -> AudioDeviceInventory:
+    inventory.all_devices = (
+        inventory.recordable_inputs
+        + inventory.recordable_loopbacks
+        + inventory.output_only_devices
+    )
+    inventory.devices_by_id = {device.id: device for device in inventory.all_devices}
+    return inventory
+
+
+class TestInteractiveDeviceSelection:
+    """Tests for interactive prompt behavior."""
+
+    @patch("infomux.commands.stream.time.sleep")
+    @patch("infomux.commands.stream.build_audio_device_inventory")
+    @patch("builtins.input", side_effect=["", ""])
+    def test_prompt_selects_defaults_without_sleep(
+        self, mock_input, mock_inventory, mock_sleep
+    ):
+        inventory = _finalize_inventory(_make_inventory())
+        mock_inventory.return_value = inventory
+
+        selected_inputs, selected_loopbacks = interactive_device_selection()
+
+        assert [device.id for device in selected_inputs] == [0]
+        assert [device.id for device in selected_loopbacks] == [1]
+        mock_sleep.assert_not_called()
+
+    @patch("infomux.commands.stream._display_devices_with_meters")
+    @patch("infomux.commands.stream.build_audio_device_inventory")
+    @patch("builtins.input", side_effect=["r", "", ""])
+    def test_prompt_refreshes_meters_on_demand(
+        self, mock_input, mock_inventory, mock_display
+    ):
+        inventory = _finalize_inventory(_make_inventory())
+        mock_inventory.return_value = inventory
+
+        interactive_device_selection()
+
+        assert any(call.kwargs.get("sample_meters") for call in mock_display.call_args_list)
+
+    @patch("infomux.commands.stream.build_audio_device_inventory")
+    @patch("builtins.input", side_effect=["2", "2"])
+    def test_output_only_devices_are_not_selectable(
+        self, mock_input, mock_inventory
+    ):
+        inventory = _finalize_inventory(_make_inventory())
+        mock_inventory.return_value = inventory
+
+        selected_inputs, selected_loopbacks = interactive_device_selection()
+
+        assert [device.id for device in selected_inputs] == [0]
+        assert [device.id for device in selected_loopbacks] == [1]
+
+
+class TestListDevicesCommand:
+    """Tests for list-devices output."""
+
+    @patch("infomux.commands.stream.build_audio_device_inventory")
+    def test_list_devices_uses_inventory_sections(self, mock_inventory, capsys):
+        inventory = _finalize_inventory(_make_inventory())
+        mock_inventory.return_value = inventory
+
+        exit_code = _list_devices()
+
+        assert exit_code == 0
+        captured = capsys.readouterr().out
+        assert "INPUTS (microphones / recordable inputs)" in captured
+        assert "LOOPBACKS (system audio capture)" in captured
+        assert "OUTPUT-ONLY DEVICES" in captured
+        input_section = captured.split("LOOPBACKS")[0]
+        assert "Mac Studio Speakers" not in input_section

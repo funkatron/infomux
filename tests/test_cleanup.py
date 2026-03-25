@@ -45,6 +45,26 @@ def test_cleanup_rejects_negative_older_than() -> None:
     assert execute(args) == 1
 
 
+def test_cleanup_defaults_to_dry_run(tmp_path, monkeypatch, capsys) -> None:
+    """Cleanup previews by default when --force is omitted."""
+    monkeypatch.setenv("INFOMUX_DATA_DIR", str(tmp_path))
+    job = _save_job_with_age(days_old=10, status=JobStatus.FAILED)
+
+    args = Namespace(
+        dry_run=False,
+        force=False,
+        orphaned=False,
+        status="failed",
+        older_than=None,
+        min_age=None,
+    )
+    assert execute(args) == 0
+    out = capsys.readouterr().out
+
+    assert "Would delete 1 run(s):" in out
+    assert job.id in out
+
+
 def test_cleanup_status_and_older_than_are_conjunctive(
     tmp_path, monkeypatch, capsys
 ) -> None:

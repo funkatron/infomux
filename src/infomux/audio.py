@@ -50,6 +50,23 @@ class AudioDevice:
     is_virtual: bool = field(default=False)
 
 
+@dataclass
+class AudioDeviceInventory:
+    """Partitioned audio device inventory for selection and display."""
+
+    recordable_inputs: list[AudioDevice]
+    recordable_loopbacks: list[AudioDevice]
+    output_only_devices: list[AudioDevice]
+    all_devices: list[AudioDevice]
+    devices_by_id: dict[int, AudioDevice]
+
+
+def _is_known_loopback_name(device_name: str) -> bool:
+    """Return True when the device name matches a known loopback pattern."""
+    device_name_lower = device_name.lower()
+    return any(pattern.lower() in device_name_lower for pattern in KNOWN_LOOPBACK_PATTERNS)
+
+
 def list_audio_devices() -> list[AudioDevice]:
     """
     List available audio input devices.
@@ -74,12 +91,18 @@ def list_audio_devices() -> list[AudioDevice]:
         text=True,
     )
 
-    # Parse the output (in stderr)
-    output = result.stderr
+    capabilities = get_device_capabilities()
     devices = []
 
-    # Look for audio devices section
-    # Lines look like: [AVFoundation indev @ 0x...] [0] Device Name
+    for device in _parse_ffmpeg_audio_devices(result.stderr):
+        devices.append(classify_device(device, capabilities=capabilities))
+
+    return devices
+
+
+def _parse_ffmpeg_audio_devices(output: str) -> list[AudioDevice]:
+    """Parse ffmpeg avfoundation device listing output."""
+    devices = []
     in_audio_section = False
     device_pattern = re.compile(r"\]\s+\[(\d+)\]\s+(.+)")
 
@@ -88,18 +111,11 @@ def list_audio_devices() -> list[AudioDevice]:
             in_audio_section = True
             continue
         if in_audio_section:
-            # Stop if we hit an error line
             if "Error" in line or "error" in line.lower():
                 break
-
-            # Parse device line
             match = device_pattern.search(line)
             if match:
-                device_id = int(match.group(1))
-                device_name = match.group(2).strip()
-                device = AudioDevice(id=device_id, name=device_name)
-                device = classify_device(device)
-                devices.append(device)
+                devices.append(AudioDevice(id=int(match.group(1)), name=match.group(2).strip()))
 
     return devices
 
@@ -207,7 +223,10 @@ def get_device_capabilities() -> dict[str, dict[str, bool]]:
         return {}
 
 
-def classify_device(device: AudioDevice) -> AudioDevice:
+def classify_device(
+    device: AudioDevice,
+    capabilities: dict[str, dict[str, bool]] | None = None,
+) -> AudioDevice:
     """
     Detect device capabilities and classify appropriately.
 
@@ -220,8 +239,8 @@ def classify_device(device: AudioDevice) -> AudioDevice:
     Returns:
         AudioDevice with capabilities and direction set appropriately.
     """
-    # Get capabilities from system_profiler
-    capabilities = get_device_capabilities()
+    if capabilities is None:
+        capabilities = get_device_capabilities()
     device_caps = capabilities.get(device.name, {})
 
     # Set capabilities
@@ -232,14 +251,7 @@ def classify_device(device: AudioDevice) -> AudioDevice:
     device.is_virtual = device_caps.get("virtual", False)
 
     # Classify direction
-    device_name_lower = device.name.lower()
-
-    # Check for known loopback patterns
-    is_loopback = False
-    for pattern in KNOWN_LOOPBACK_PATTERNS:
-        if pattern.lower() in device_name_lower:
-            is_loopback = True
-            break
+    is_loopback = _is_known_loopback_name(device.name)
 
     # Virtual devices are typically loopbacks
     if device.is_virtual:
@@ -258,6 +270,69 @@ def classify_device(device: AudioDevice) -> AudioDevice:
     return device
 
 
+def build_audio_device_inventory() -> AudioDeviceInventory:
+    """Discover devices once and partition them for prompt and list views."""
+    ffmpeg = find_tool("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg not found")
+
+    ffmpeg_result = subprocess.run(
+        [str(ffmpeg), "-f", "avfoundation", "-list_devices", "true", "-i", ""],
+        capture_output=True,
+        text=True,
+    )
+    capabilities = get_device_capabilities()
+    capability_data_available = bool(capabilities)
+
+    ffmpeg_devices: list[AudioDevice] = []
+    devices_by_name: dict[str, AudioDevice] = {}
+
+    for raw_device in _parse_ffmpeg_audio_devices(ffmpeg_result.stderr):
+        device = classify_device(raw_device, capabilities=capabilities)
+        ffmpeg_devices.append(device)
+        devices_by_name[device.name] = device
+
+    next_id = max((device.id for device in ffmpeg_devices), default=-1) + 1
+    output_only_devices: list[AudioDevice] = []
+    for device_name, caps in capabilities.items():
+        if device_name in devices_by_name:
+            continue
+        if caps.get("output") and not caps.get("input"):
+            output_only_devices.append(
+                AudioDevice(
+                    id=next_id,
+                    name=device_name,
+                    direction="output",
+                    has_input=False,
+                    has_output=True,
+                    is_virtual=caps.get("virtual", False),
+                )
+            )
+            next_id += 1
+
+    recordable_inputs: list[AudioDevice] = []
+    recordable_loopbacks: list[AudioDevice] = []
+    for device in ffmpeg_devices:
+        if not device.has_input:
+            continue
+        if device.direction == "loopback" or device.is_virtual:
+            recordable_loopbacks.append(device)
+        else:
+            recordable_inputs.append(device)
+
+    all_devices = recordable_inputs + recordable_loopbacks + output_only_devices
+    devices_by_id = {
+        device.id: device for device in (recordable_inputs + recordable_loopbacks)
+    }
+    return AudioDeviceInventory(
+        recordable_inputs=recordable_inputs,
+        recordable_loopbacks=recordable_loopbacks,
+        output_only_devices=output_only_devices,
+        all_devices=all_devices,
+        devices_by_id=devices_by_id,
+    )
+
+
 def list_input_devices() -> list[AudioDevice]:
     """
     Return devices that can be used as input (microphones).
@@ -265,8 +340,7 @@ def list_input_devices() -> list[AudioDevice]:
     Returns:
         List of AudioDevice objects that have input capability.
     """
-    all_devices = list_audio_devices()
-    return [d for d in all_devices if d.has_input]
+    return build_audio_device_inventory().recordable_inputs
 
 
 def list_output_devices() -> list[AudioDevice]:
@@ -279,39 +353,8 @@ def list_output_devices() -> list[AudioDevice]:
     Returns:
         List of AudioDevice objects that have output capability or are loopback.
     """
-    # Start with devices from ffmpeg
-    all_devices = list_audio_devices()
-    device_map = {d.name: d for d in all_devices}
-
-    # Add output-only devices from system_profiler that ffmpeg doesn't see
-    capabilities = get_device_capabilities()
-    next_id = max([d.id for d in all_devices], default=-1) + 1
-
-    for device_name, caps in capabilities.items():
-        # Skip if already in ffmpeg list
-        if device_name in device_map:
-            continue
-
-        # Add output-only devices (they can't be recorded from, but user should see them)
-        if caps.get("output") and not caps.get("input"):
-            device = AudioDevice(
-                id=next_id,
-                name=device_name,
-                direction="output",
-                has_input=False,
-                has_output=True,
-                is_virtual=caps.get("virtual", False),
-            )
-            all_devices.append(device)
-            device_map[device_name] = device
-            next_id += 1
-
-    # Include devices with output capability OR loopback devices
-    return [
-        d
-        for d in all_devices
-        if d.has_output or d.direction == "loopback" or d.is_virtual
-    ]
+    inventory = build_audio_device_inventory()
+    return inventory.recordable_loopbacks + inventory.output_only_devices
 
 
 def list_loopback_devices() -> list[AudioDevice]:
@@ -321,8 +364,7 @@ def list_loopback_devices() -> list[AudioDevice]:
     Returns:
         List of AudioDevice objects with direction='loopback' or is_virtual=True.
     """
-    all_devices = list_audio_devices()
-    return [d for d in all_devices if d.direction == "loopback" or d.is_virtual]
+    return build_audio_device_inventory().recordable_loopbacks
 
 
 def get_default_input() -> AudioDevice | None:
@@ -332,7 +374,7 @@ def get_default_input() -> AudioDevice | None:
     Returns:
         AudioDevice if found, None otherwise.
     """
-    inputs = list_input_devices()
+    inputs = build_audio_device_inventory().recordable_inputs
     if not inputs:
         return None
 
@@ -353,12 +395,12 @@ def get_default_output() -> AudioDevice | None:
         AudioDevice if found, None otherwise.
     """
     # Prefer loopback devices for system audio capture
-    loopbacks = list_loopback_devices()
+    inventory = build_audio_device_inventory()
+    loopbacks = inventory.recordable_loopbacks
     if loopbacks:
         return loopbacks[0]
 
-    # Fall back to any output-capable device
-    outputs = list_output_devices()
+    outputs = inventory.output_only_devices
     return outputs[0] if outputs else None
 
 
@@ -369,7 +411,7 @@ def get_default_loopback() -> AudioDevice | None:
     Returns:
         AudioDevice if found, None otherwise.
     """
-    loopbacks = list_loopback_devices()
+    loopbacks = build_audio_device_inventory().recordable_loopbacks
     return loopbacks[0] if loopbacks else None
 
 
@@ -383,11 +425,7 @@ def get_device_by_id(device_id: int) -> AudioDevice | None:
     Returns:
         AudioDevice if found, None otherwise.
     """
-    devices = list_audio_devices()
-    for device in devices:
-        if device.id == device_id:
-            return device
-    return None
+    return build_audio_device_inventory().devices_by_id.get(device_id)
 
 
 def get_audio_levels(
@@ -411,8 +449,11 @@ def get_audio_levels(
         return {}
 
     levels: dict[int, float] = {}
-
+    unique_devices: dict[int, AudioDevice] = {}
     for device in devices:
+        unique_devices.setdefault(device.id, device)
+
+    for device in unique_devices.values():
         try:
             # Use ffmpeg to sample audio and detect volume
             # -t duration: sample for specified time

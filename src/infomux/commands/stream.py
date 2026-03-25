@@ -27,15 +27,13 @@ from pathlib import Path
 
 from infomux.audio import (
     AudioDevice,
+    AudioDeviceInventory,
+    build_audio_device_inventory,
     get_audio_levels,
     get_default_input,
     get_default_loopback,
     get_default_output,
     get_device_by_id,
-    list_audio_devices,
-    list_input_devices,
-    list_loopback_devices,
-    list_output_devices,
     record_audio,
     render_level_meter,
 )
@@ -84,8 +82,8 @@ def configure_parser(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--prompt",
         action="store_true",
-        help="Interactive device selection with live audio meters. "
-        "Shows real-time audio levels for each device.",
+        help="Interactive device selection with optional audio meter sampling. "
+        "Press 'r' while selecting to sample device levels on demand.",
     )
     parser.add_argument(
         "--list-devices",
@@ -974,181 +972,178 @@ def interactive_device_selection() -> tuple[list[AudioDevice], list[AudioDevice]
     Raises:
         KeyboardInterrupt: If user cancels.
     """
-    inputs = list_input_devices()
-    outputs = list_output_devices()
-    list_loopback_devices()
+    inventory = build_audio_device_inventory()
+    inputs = inventory.recordable_inputs
+    loopbacks = inventory.recordable_loopbacks
+    output_only_devices = inventory.output_only_devices
 
-    if not inputs and not outputs:
+    if not inputs and not loopbacks and not output_only_devices:
         print("No audio devices found.", file=sys.stderr)
         raise ValueError("No devices available")
 
-    # Show initial display
-    print(file=sys.stderr)
-    print("=" * 60, file=sys.stderr)
-    print("Interactive Device Selection", file=sys.stderr)
-    print("=" * 60, file=sys.stderr)
-    print(file=sys.stderr)
-    print(
-        "Watch the audio meters to see which devices are active.",
-        file=sys.stderr,
-    )
-    print("Meters update every 0.5 seconds.", file=sys.stderr)
-    print(file=sys.stderr)
-
-    # Show meters continuously until user is ready
     selected_input_ids: set[int] = set()
-    input_line = ""
-
-    # First, show meters a few times so user can see activity
-    for _ in range(3):
-        _display_devices_with_meters(inputs, outputs, selected_input_ids)
-        print(file=sys.stderr)
-        print("Watching audio levels...", file=sys.stderr)
-        time.sleep(0.5)
-
-    # Now prompt for input
     default_input = str(inputs[0].id) if inputs else "-1"
-    print(file=sys.stderr)
-    print("-" * 60, file=sys.stderr)
-    prompt = f"Select inputs (comma-separated IDs, -1 for none) [{default_input}]: "
-
-    try:
-        input_line = input(prompt).strip()
-    except (EOFError, KeyboardInterrupt):
-        raise KeyboardInterrupt
-
-    print(file=sys.stderr)
-
-    # Parse input selection
-    if not input_line:
-        input_line = default_input
-
-    if input_line.strip() != "-1":
-        for part in input_line.split(","):
-            part = part.strip()
-            if part:
-                try:
-                    device_id = int(part)
-                    if any(d.id == device_id for d in inputs):
-                        selected_input_ids.add(device_id)
-                except ValueError:
-                    pass
-
-    # Show meters for output selection
-    print(file=sys.stderr)
-    print("Now select output devices (for system audio capture):", file=sys.stderr)
-    print(file=sys.stderr)
-
-    # Show meters a few times
     selected_loopback_ids: set[int] = set()
-    for _ in range(3):
-        _display_devices_with_meters(
-            inputs, outputs, selected_input_ids, selected_loopback_ids
-        )
-        print(file=sys.stderr)
-        print("Watching audio levels...", file=sys.stderr)
-        time.sleep(0.5)
+    default_loopback = str(loopbacks[0].id) if loopbacks else "-1"
 
-    # Prompt for output selection
-    default_loopback = str(outputs[0].id) if outputs else "-1"
+    _display_devices_with_meters(
+        inventory,
+        selected_input_ids,
+        selected_loopback_ids,
+        clear_screen=False,
+    )
+
+    selected_input_ids = _prompt_for_device_ids(
+        inventory,
+        "Select inputs (comma-separated IDs, -1 for none, r to sample meters) "
+        f"[{default_input}]: ",
+        inputs,
+        selected_input_ids,
+        selected_loopback_ids,
+        default_input,
+    )
     print(file=sys.stderr)
-    print("-" * 60, file=sys.stderr)
-    prompt = f"Select outputs (comma-separated IDs, -1 for none) [{default_loopback}]: "
 
-    try:
-        loopback_line = input(prompt).strip()
-    except (EOFError, KeyboardInterrupt):
-        raise KeyboardInterrupt
-
+    selected_loopback_ids = _prompt_for_device_ids(
+        inventory,
+        "Select loopback devices (comma-separated IDs, -1 for none, r to sample meters) "
+        f"[{default_loopback}]: ",
+        loopbacks,
+        selected_input_ids,
+        selected_loopback_ids,
+        default_loopback,
+    )
     print(file=sys.stderr)
-
-    # Parse loopback selection
-    if not loopback_line:
-        loopback_line = default_loopback
-
-    if loopback_line.strip() != "-1":
-        for part in loopback_line.split(","):
-            part = part.strip()
-            if part:
-                try:
-                    device_id = int(part)
-                    if any(d.id == device_id for d in outputs):
-                        selected_loopback_ids.add(device_id)
-                except ValueError:
-                    pass
 
     # Build result lists
     selected_inputs = [d for d in inputs if d.id in selected_input_ids]
-    selected_loopbacks = [d for d in outputs if d.id in selected_loopback_ids]
+    selected_loopbacks = [d for d in loopbacks if d.id in selected_loopback_ids]
 
     # Default to first device if nothing selected
     if not selected_inputs and not selected_loopbacks:
         if inputs:
             selected_inputs = [inputs[0]]
-        if outputs:
-            selected_loopbacks = [outputs[0]]
+        if loopbacks:
+            selected_loopbacks = [loopbacks[0]]
 
     return selected_inputs, selected_loopbacks
 
 
+def _prompt_for_device_ids(
+    inventory: AudioDeviceInventory,
+    prompt: str,
+    allowed_devices: list[AudioDevice],
+    selected_input_ids: set[int],
+    selected_loopback_ids: set[int],
+    default_value: str,
+) -> set[int]:
+    """Prompt for device IDs, allowing on-demand meter sampling."""
+    allowed_ids = {device.id for device in allowed_devices}
+
+    while True:
+        try:
+            user_input = input(prompt).strip()
+        except (EOFError, KeyboardInterrupt):
+            raise KeyboardInterrupt
+
+        if user_input.lower() == "r":
+            _display_devices_with_meters(
+                inventory,
+                selected_input_ids,
+                selected_loopback_ids,
+                clear_screen=True,
+                sample_meters=True,
+            )
+            continue
+
+        if not user_input:
+            user_input = default_value
+        if user_input == "-1":
+            return set()
+
+        selected_ids: set[int] = set()
+        for part in user_input.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                device_id = int(part)
+            except ValueError:
+                continue
+            if device_id in allowed_ids:
+                selected_ids.add(device_id)
+        return selected_ids
+
+
+def _device_role_badges(device: AudioDevice) -> str:
+    """Render compact role badges for a device."""
+    badges: list[str] = []
+    if device.direction == "loopback" or device.is_virtual:
+        badges.append("loopback")
+    elif device.has_input and device.has_output:
+        badges.append("in/out")
+    elif device.has_input:
+        badges.append("in")
+    if device.is_virtual and "virtual" not in badges:
+        badges.append("virtual")
+    if not device.has_input and device.has_output:
+        badges.append("output-only")
+    return " ".join(f"[{badge}]" for badge in badges)
+
+
 def _display_devices_with_meters(
-    inputs: list[AudioDevice],
-    outputs: list[AudioDevice],
+    inventory: AudioDeviceInventory,
     selected_input_ids: set[int] | None = None,
     selected_loopback_ids: set[int] | None = None,
     clear_screen: bool = True,
+    sample_meters: bool = False,
 ) -> None:
-    """Display devices with live audio meters."""
+    """Display devices with optional audio meters."""
     selected_input_ids = selected_input_ids or set()
     selected_loopback_ids = selected_loopback_ids or set()
 
     if clear_screen:
         print("\033[2J\033[H", end="", file=sys.stderr)  # Clear screen and move to top
-    print("Available audio devices:", file=sys.stderr)
+    print("Interactive Device Selection", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
+    print(file=sys.stderr)
+    print("Press 'r' at any prompt to sample audio meters on demand.", file=sys.stderr)
     print(file=sys.stderr)
 
-    # Get audio levels for all devices
-    all_devices = inputs + outputs
-    levels = get_audio_levels(all_devices, duration=0.3)
-    level_map = {d.id: levels.get(d.id, 0.0) for d in all_devices}
+    level_map: dict[int, float] = {}
+    if sample_meters:
+        levels = get_audio_levels(inventory.all_devices, duration=0.3)
+        level_map = {device.id: levels.get(device.id, 0.0) for device in inventory.all_devices}
 
-    if inputs:
-        print("  INPUTS (can record from):", file=sys.stderr)
-        for device in inputs:
-            level = level_map.get(device.id, 0.0)
-            meter = render_level_meter(level, width=5)
-            selected = "✓" if device.id in selected_input_ids else " "
-            name_padded = device.name.ljust(30)
-            # Show capabilities
-            caps = []
-            if device.has_output:
-                caps.append("output")
-            if device.is_virtual:
-                caps.append("virtual")
-            cap_str = f" ({', '.join(caps)})" if caps else ""
-            print(
-                f"    [{device.id}] {name_padded} [{meter}] {selected}{cap_str}",
-                file=sys.stderr,
-            )
+    if inventory.recordable_inputs:
+        print("  INPUTS (microphones / recordable inputs):", file=sys.stderr)
+        for device in inventory.recordable_inputs:
+            row = f"    [{device.id}] {device.name} {_device_role_badges(device)}".rstrip()
+            if sample_meters:
+                row = f"{row} [{render_level_meter(level_map.get(device.id, 0.0), width=5)}]"
+            if device.id in selected_input_ids:
+                row = f"{row}  ✓"
+            print(row, file=sys.stderr)
         print(file=sys.stderr)
 
-    if outputs:
-        print("  OUTPUTS (for system audio capture):", file=sys.stderr)
-        for device in outputs:
-            level = level_map.get(device.id, 0.0)
-            meter = render_level_meter(level, width=5)
-            selected = "✓" if device.id in selected_loopback_ids else " "
-            name_padded = device.name.ljust(30)
-            # Mark loopback devices
-            loopback_marker = (
-                " [loopback]"
-                if (device.is_virtual or device.direction == "loopback")
-                else ""
-            )
-            print(
-                f"    [{device.id}] {name_padded} [{meter}] {selected}{loopback_marker}",
-                file=sys.stderr,
-            )
+    if inventory.recordable_loopbacks:
+        print("  LOOPBACKS (system audio capture):", file=sys.stderr)
+        for device in inventory.recordable_loopbacks:
+            row = f"    [{device.id}] {device.name} {_device_role_badges(device)}".rstrip()
+            if sample_meters:
+                row = f"{row} [{render_level_meter(level_map.get(device.id, 0.0), width=5)}]"
+            if device.id in selected_loopback_ids:
+                row = f"{row}  ✓"
+            print(row, file=sys.stderr)
+        print(file=sys.stderr)
+
+    if inventory.output_only_devices:
+        print("  OUTPUT-ONLY DEVICES (informational; not selectable):", file=sys.stderr)
+        for device in inventory.output_only_devices:
+            row = f"    [{device.id}] {device.name} {_device_role_badges(device)}".rstrip()
+            if sample_meters:
+                row = f"{row} [{render_level_meter(level_map.get(device.id, 0.0), width=5)}]"
+            print(row, file=sys.stderr)
         print(file=sys.stderr)
 
 
@@ -1220,44 +1215,31 @@ def _list_devices() -> int:
         Exit code (0 for success).
     """
     try:
-        devices = list_audio_devices()
+        inventory = build_audio_device_inventory()
     except RuntimeError as e:
         logger.error("Failed to list devices: %s", e)
         return 1
 
-    if not devices:
+    if not inventory.all_devices:
         print("No audio devices found.")
         return 0
 
-    inputs = list_input_devices()
-    outputs = list_output_devices()
-    list_loopback_devices()
-
     print("Available audio devices:")
     print()
-    if inputs:
-        print("  INPUTS (can record from):")
-        for device in inputs:
-            caps = []
-            if device.has_input:
-                caps.append("input")
-            if device.has_output:
-                caps.append("output")
-            if device.is_virtual:
-                caps.append("virtual")
-            cap_str = f" ({', '.join(caps)})" if caps else ""
-            print(f"    [{device.id}] {device.name}{cap_str}")
+    if inventory.recordable_inputs:
+        print("  INPUTS (microphones / recordable inputs):")
+        for device in inventory.recordable_inputs:
+            print(f"    [{device.id}] {device.name} {_device_role_badges(device)}".rstrip())
         print()
-    if outputs:
-        print("  OUTPUTS (for system audio capture):")
-        for device in outputs:
-            markers = []
-            if device.is_virtual or device.direction == "loopback":
-                markers.append("loopback")
-            if not device.has_input:
-                markers.append("output-only")
-            marker_str = f" [{', '.join(markers)}]" if markers else ""
-            print(f"    [{device.id}] {device.name}{marker_str}")
+    if inventory.recordable_loopbacks:
+        print("  LOOPBACKS (system audio capture):")
+        for device in inventory.recordable_loopbacks:
+            print(f"    [{device.id}] {device.name} {_device_role_badges(device)}".rstrip())
+        print()
+    if inventory.output_only_devices:
+        print("  OUTPUT-ONLY DEVICES:")
+        for device in inventory.output_only_devices:
+            print(f"    [{device.id}] {device.name} {_device_role_badges(device)}".rstrip())
         print()
     print("Use: infomux stream --input <id> --output <id>")
     print("Or:  infomux stream --prompt (interactive selection)")
