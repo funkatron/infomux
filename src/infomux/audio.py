@@ -283,7 +283,6 @@ def build_audio_device_inventory() -> AudioDeviceInventory:
         text=True,
     )
     capabilities = get_device_capabilities()
-    capability_data_available = bool(capabilities)
 
     ffmpeg_devices: list[AudioDevice] = []
     devices_by_name: dict[str, AudioDevice] = {}
