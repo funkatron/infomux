@@ -140,6 +140,8 @@ class TestPipelineRegistry:
         """list_pipelines returns available pipelines."""
         names = list_pipelines()
         assert "transcribe" in names
+        assert "summarize-openai" in names
+        assert "report-openai" in names
 
     def test_get_pipeline_default(self) -> None:
         """get_pipeline(None) returns default."""
@@ -150,6 +152,25 @@ class TestPipelineRegistry:
         """get_pipeline finds pipeline by name."""
         pipeline = get_pipeline("transcribe")
         assert pipeline.name == "transcribe"
+
+    def test_get_pipeline_summarize_openai(self) -> None:
+        """OpenAI summarize pipeline has expected steps."""
+        pipeline = get_pipeline("summarize-openai")
+        assert pipeline.step_names() == [
+            "extract_audio",
+            "transcribe",
+            "summarize_openai",
+        ]
+
+    def test_get_pipeline_report_openai(self) -> None:
+        """OpenAI report pipeline includes timestamps + summary."""
+        pipeline = get_pipeline("report-openai")
+        assert pipeline.step_names() == [
+            "extract_audio",
+            "transcribe",
+            "transcribe_timed",
+            "summarize_openai",
+        ]
 
     def test_get_pipeline_unknown(self) -> None:
         """get_pipeline raises for unknown name."""

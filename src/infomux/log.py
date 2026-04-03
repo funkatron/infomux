@@ -62,7 +62,7 @@ def configure_logging(
 
     # Configure root logger for infomux
     formatter = logging.Formatter(format_string, date_format)
-    
+
     # Always write to stderr
     stderr_handler = logging.StreamHandler(sys.stderr)
     stderr_handler.setFormatter(formatter)
@@ -72,14 +72,14 @@ def configure_logging(
     infomux_logger.setLevel(log_level)
     infomux_logger.handlers.clear()
     infomux_logger.addHandler(stderr_handler)
-    
+
     # Optionally add file handler
     if log_file:
         log_file.parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setFormatter(formatter)
         infomux_logger.addHandler(file_handler)
-    
+
     infomux_logger.propagate = False
 
 

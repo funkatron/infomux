@@ -14,9 +14,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from infomux.steps.summarize import (
+    CHUNK_OVERLAP,
     CONTENT_TYPE_HINTS,
     DEFAULT_CHUNK_SIZE,
-    CHUNK_OVERLAP,
     MIN_CHUNK_THRESHOLD,
     SummarizeStep,
     _chunk_text,
@@ -97,7 +97,9 @@ class TestChunkText:
 
         # Should produce 2 chunks for 15k at 12k chunk size
         assert len(chunks) >= 1
-        assert all(len(c) <= DEFAULT_CHUNK_SIZE + 100 for c in chunks)  # Allow small overflow
+        assert all(
+            len(c) <= DEFAULT_CHUNK_SIZE + 100 for c in chunks
+        )  # Allow small overflow
 
 
 class TestContentTypeHints:
@@ -233,9 +235,7 @@ class TestSummarizeStep:
         assert "meeting" in prompt.lower() or "action items" in prompt.lower()
 
     @patch.object(SummarizeStep, "_call_ollama")
-    def test_custom_content_hint(
-        self, mock_ollama: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_custom_content_hint(self, mock_ollama: MagicMock, tmp_path: Path) -> None:
         """Custom content hints are passed through."""
         mock_ollama.return_value = ("Summary", 50)
 
@@ -253,9 +253,7 @@ class TestSummarizeStep:
         assert "quarterly review" in prompt.lower()
 
     @patch.object(SummarizeStep, "_call_ollama")
-    def test_output_file_created(
-        self, mock_ollama: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_output_file_created(self, mock_ollama: MagicMock, tmp_path: Path) -> None:
         """Summary is written to output file."""
         expected_summary = "## Overview\nThis is the summary."
         mock_ollama.return_value = (expected_summary, 100)

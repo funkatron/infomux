@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import sys
 from argparse import ArgumentParser, Namespace
+from datetime import UTC, datetime
 
 from infomux.config import get_tool_paths
 from infomux.job import JobStatus
@@ -57,6 +58,20 @@ def configure_parser(parser: ArgumentParser) -> None:
         default=None,
         help="Ollama model for summarization steps. "
         "Overrides the model used in the original run. Example: qwen2.5:32b-instruct",
+    )
+    parser.add_argument(
+        "--openai-model",
+        type=str,
+        default=None,
+        help="OpenAI model for summarize_openai-based steps. "
+        "Overrides INFOMUX_OPENAI_MODEL.",
+    )
+    parser.add_argument(
+        "--openai-base-url",
+        type=str,
+        default=None,
+        help="OpenAI API base URL for summarize_openai-based steps. "
+        "Overrides INFOMUX_OPENAI_BASE_URL.",
     )
     parser.add_argument(
         "--content-type-hint",
@@ -155,17 +170,42 @@ def execute(args: Namespace) -> int:
     # Set model override if specified
     if args.model:
         import os
+
         os.environ["INFOMUX_OLLAMA_MODEL"] = args.model
         logger.debug("using model: %s", args.model)
+    if args.openai_model:
+        import os
+
+        os.environ["INFOMUX_OPENAI_MODEL"] = args.openai_model
+        logger.debug("using OpenAI model: %s", args.openai_model)
+    if args.openai_base_url:
+        import os
+
+        os.environ["INFOMUX_OPENAI_BASE_URL"] = args.openai_base_url
+        logger.debug("using OpenAI base URL: %s", args.openai_base_url)
 
     # Set content type hint if specified
     if args.content_type_hint:
         import os
+
         os.environ["INFOMUX_CONTENT_TYPE_HINT"] = args.content_type_hint
         logger.debug("content type hint: %s", args.content_type_hint)
 
     # Execute the remaining steps
-    success = run_pipeline(job, run_dir, pipeline=pipeline, step_names=steps_to_run)
+    try:
+        success = run_pipeline(job, run_dir, pipeline=pipeline, step_names=steps_to_run)
+    except KeyboardInterrupt:
+        logger.info("resume interrupted by user")
+        for step in reversed(job.steps):
+            if step.status == "running":
+                step.status = "interrupted"
+                step.completed_at = datetime.now(UTC).isoformat()
+                step.error = "interrupted by user"
+                break
+        job.update_status(JobStatus.INTERRUPTED, "interrupted by user")
+        save_job(job)
+        print(get_run_dir(job.id), file=sys.stdout)
+        return 130
 
     # Update final status
     if success:

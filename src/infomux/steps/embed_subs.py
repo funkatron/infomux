@@ -109,7 +109,7 @@ class EmbedSubsStep:
                 self.name,
                 f"Input file is audio-only ({video_path.suffix}), but embed_subs requires a video file. "
                 f"Use the 'audio-to-video' pipeline instead to generate a video from audio with subtitles: "
-                f"infomux run --pipeline audio-to-video {video_path}"
+                f"infomux run --pipeline audio-to-video {video_path}",
             )
 
         # Output filename
@@ -176,11 +176,16 @@ class EmbedSubsStep:
         return [
             str(ffmpeg),
             "-y",  # Overwrite output
-            "-i", str(video),
-            "-i", str(subs),
-            "-c", "copy",  # Copy video/audio streams
-            "-c:s", "mov_text",  # Subtitle codec for MP4
-            "-metadata:s:s:0", f"language={self.language}",
+            "-i",
+            str(video),
+            "-i",
+            str(subs),
+            "-c",
+            "copy",  # Copy video/audio streams
+            "-c:s",
+            "mov_text",  # Subtitle codec for MP4
+            "-metadata:s:s:0",
+            f"language={self.language}",
             str(output),
         ]
 
@@ -216,9 +221,12 @@ class EmbedSubsStep:
         return [
             str(ffmpeg),
             "-y",
-            "-i", str(video),
-            "-vf", sub_filter,
-            "-c:a", "copy",  # Copy audio stream
+            "-i",
+            str(video),
+            "-vf",
+            sub_filter,
+            "-c:a",
+            "copy",  # Copy audio stream
             str(output),
         ]
 

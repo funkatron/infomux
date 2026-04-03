@@ -13,17 +13,88 @@ from typing import TYPE_CHECKING
 
 from infomux import __version__
 from infomux.commands import analyze_timing as analyze_timing_cmd
+from infomux.commands import audio_recon as audio_recon_cmd
+from infomux.commands import cache as cache_cmd
 from infomux.commands import cleanup as cleanup_cmd
 from infomux.commands import inspect as inspect_cmd
 from infomux.commands import resume as resume_cmd
 from infomux.commands import run as run_cmd
 from infomux.commands import stream as stream_cmd
+from infomux.env import load_dotenv
 from infomux.log import configure_logging, get_logger
 
 if TYPE_CHECKING:
     from argparse import Namespace
 
 logger = get_logger(__name__)
+
+
+def _print_parse_tips(argv: list[str]) -> None:
+    """
+    Print concise recovery tips after argparse errors.
+
+    Tier-1 coverage:
+    - Missing top-level command
+    - Missing required positional/subcommand for common commands
+    """
+    known_commands = {
+        "run",
+        "inspect",
+        "resume",
+        "stream",
+        "cleanup",
+        "cache",
+        "analyze-timing",
+        "audio-recon",
+    }
+    first_token = argv[0] if argv else None
+
+    # Missing command (e.g., `infomux` or only global flags)
+    if not argv or (first_token and first_token.startswith("-")):
+        print("\nTry one of these:", file=sys.stderr)
+        print("  infomux run input.mp4", file=sys.stderr)
+        print("  infomux stream  # default: mic + loopback when available", file=sys.stderr)
+        print("  infomux inspect --list", file=sys.stderr)
+        print("  infomux --help", file=sys.stderr)
+        return
+
+    # Unknown top-level command
+    if first_token not in known_commands:
+        print("\nUnknown command. Available commands:", file=sys.stderr)
+        print(
+            "  run, inspect, resume, stream, cleanup, cache, analyze-timing, audio-recon",
+            file=sys.stderr,
+        )
+        print("  infomux --help", file=sys.stderr)
+        return
+
+    # Command-specific required positional/subcommand guidance.
+    if first_token == "resume" and len(argv) == 1:
+        print("\nTry:", file=sys.stderr)
+        print("  infomux resume <run-id>", file=sys.stderr)
+        print("  infomux inspect --list", file=sys.stderr)
+        return
+
+    if first_token == "analyze-timing" and len(argv) == 1:
+        print("\nTry:", file=sys.stderr)
+        print("  infomux analyze-timing <run-id>", file=sys.stderr)
+        print("  infomux inspect --list", file=sys.stderr)
+        return
+
+    if first_token == "cache":
+        if len(argv) == 1:
+            print("\nTry:", file=sys.stderr)
+            print("  infomux cache external status", file=sys.stderr)
+            print("  infomux cache external list", file=sys.stderr)
+            print("  infomux cache external clear --yes", file=sys.stderr)
+            return
+        if len(argv) == 2 and argv[1] == "external":
+            print("\nTry:", file=sys.stderr)
+            print("  infomux cache external status", file=sys.stderr)
+            print("  infomux cache external path", file=sys.stderr)
+            print("  infomux cache external list", file=sys.stderr)
+            print("  infomux cache external clear --yes", file=sys.stderr)
+            return
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -46,8 +117,12 @@ Examples:
 
   # Real-time recording and transcription
   infomux stream
-  infomux stream --device 0 --silence 5
+  infomux stream --prompt
+  infomux stream --input 0 --output 1 --silence 5
   infomux stream --pipeline summarize
+
+  # Quick loopback / system-audio check (auto device selection)
+  infomux audio-recon
 
   # Inspect and manage runs
   infomux inspect --list
@@ -63,6 +138,11 @@ Examples:
   infomux cleanup --dry-run --orphaned
   infomux cleanup --force --status running
   infomux cleanup --force --older-than 30d
+
+  # Inspect/manage external service cache
+  infomux cache external status
+  infomux cache external list
+  infomux cache external clear --yes
 
 Environment Variables:
   INFOMUX_DATA_DIR    Base directory for runs and models
@@ -103,9 +183,11 @@ For more information, see: https://github.com/funkatron/infomux
     run_parser = subparsers.add_parser(
         "run",
         help="Run a pipeline on a media file",
-        description="Process a media file (or URL) through the configured pipeline steps. "
-        "Supports audio, video, and text files. Automatically detects HTML content "
-        "and uses the web-summarize pipeline when appropriate.",
+        description=(
+            "Process a media file (or URL) through the configured pipeline steps. "
+            "Supports audio, video, and text files. Automatically detects HTML content "
+            "and uses the web-summarize pipeline when appropriate."
+        ),
         epilog="""
 Examples:
   # Basic transcription (default pipeline)
@@ -170,7 +252,8 @@ Examples:
         help="Resume an interrupted run",
         description="Continue a run that was interrupted or failed. "
         "Skips already-completed steps and re-runs from the specified point. "
-        "Useful for recovering from errors or re-running steps with different settings.",
+        "Useful for recovering from errors or re-running steps with different "
+        "settings.",
         epilog="""
 Examples:
   # Resume a failed run (continues from where it stopped)
@@ -180,10 +263,12 @@ Examples:
   infomux resume --from-step transcribe run-20260111-020549-c36c19
 
   # Re-generate summary with different model
-  infomux resume --from-step summarize --model qwen2.5:32b-instruct run-20260111-020549-c36c19
+  infomux resume --from-step summarize --model qwen2.5:32b-instruct \\
+      run-20260111-020549-c36c19
 
   # Re-summarize with content type hint
-  infomux resume --from-step summarize --content-type-hint meeting run-20260111-020549-c36c19
+  infomux resume --from-step summarize --content-type-hint meeting \\
+      run-20260111-020549-c36c19
 
   # Preview what would be re-run
   infomux resume --dry-run run-20260111-020549-c36c19
@@ -195,15 +280,24 @@ Examples:
     stream_parser = subparsers.add_parser(
         "stream",
         help="Real-time audio capture and transcription",
-        description="Record from microphone and transcribe in real-time. "
-        "Supports multiple stop conditions: duration, silence detection, or stop phrase. "
+        description="Record from audio devices and transcribe in real-time. "
+        "By default uses the system default input plus a loopback device when "
+        "available (for mixed mic + system audio). Use --list-devices for IDs; "
+        "use --input/--output to override. "
+        "Supports stop conditions: duration, silence detection, or stop phrase. "
         "Can run additional pipelines (like summarize) after recording completes.",
         epilog="""
 Examples:
-  # Interactive device selection and recording
+  # Default capture (default input + default loopback when available)
   infomux stream
 
-  # Record from specific device
+  # Interactive device selection with live meters
+  infomux stream --prompt
+
+  # Explicit input and output device IDs (from --list-devices)
+  infomux stream --input 1 --output 2
+
+  # Legacy: single microphone only, no loopback (older CLI behavior)
   infomux stream --device 2
 
   # 5-minute voice memo
@@ -219,9 +313,9 @@ Examples:
   infomux stream --pipeline summarize
 
   # Meeting notes with auto-silence detection
-  infomux stream --device 2 --silence 10 --pipeline summarize
+  infomux stream --input 1 --silence 10 --pipeline summarize
 
-  # List available audio devices
+  # List INPUTS and OUTPUTS with device IDs
   infomux stream --list-devices
 """,
     )
@@ -232,26 +326,26 @@ Examples:
         "cleanup",
         help="Remove orphaned or unwanted runs",
         description="Clean up the runs directory by removing orphaned runs, stuck runs, or runs matching specific criteria. "
-        "Always use --dry-run first to preview what would be deleted. Requires --force to actually delete.",
+        "Cleanup previews matches by default; pass --force to actually delete them.",
         epilog="""
 Examples:
-  # Preview orphaned runs (always do this first!)
-  infomux cleanup --dry-run --orphaned
+  # Preview orphaned runs (default behavior)
+  infomux cleanup --orphaned
 
   # Delete orphaned runs (no valid job.json)
   infomux cleanup --force --orphaned
 
-  # Delete stuck runs (status: running)
-  infomux cleanup --force --status running
+  # Preview stuck runs (status: running)
+  infomux cleanup --status running
 
   # Delete runs older than 30 days
   infomux cleanup --force --older-than 30d
 
-  # Delete failed runs older than 7 days (with safety check)
-  infomux cleanup --force --status failed --older-than 7d --min-age 1d
+  # Preview failed runs older than 7 days (with safety check)
+  infomux cleanup --status failed --older-than 7d --min-age 1d
 
-  # Combine filters: delete orphaned and stuck runs
-  infomux cleanup --force --orphaned --status running
+  # Combine filters: preview orphaned and stuck runs
+  infomux cleanup --orphaned --status running
 
 Time specifications:
   Use 'd' for days, 'w' for weeks, 'm' for months
@@ -260,11 +354,38 @@ Time specifications:
     )
     cleanup_cmd.configure_parser(cleanup_parser)
 
+    # cache subcommand
+    cache_parser = subparsers.add_parser(
+        "cache",
+        help="Inspect and manage local caches",
+        description="Manage caches by domain. "
+        "Example: external service response caches.",
+        epilog="""
+Examples:
+  # Show external cache status (provider, path, file count, bytes)
+  infomux cache external status
+
+  # Print cache path only
+  infomux cache external path
+
+  # List cached files
+  infomux cache external list
+
+  # Clear cache files (with confirmation)
+  infomux cache external clear
+
+  # Clear cache files without prompt
+  infomux cache external clear --yes
+""",
+    )
+    cache_cmd.configure_parser(cache_parser)
+
     # analyze-timing subcommand
     analyze_parser = subparsers.add_parser(
         "analyze-timing",
         help="Analyze timing accuracy of lyric videos",
-        description="Extract frames at word timestamps and analyze audio to verify timing accuracy. "
+        description="Extract frames at word timestamps and analyze audio to "
+        "verify timing accuracy. "
         "Useful for debugging timing issues in lyric videos.",
         epilog="""
 Examples:
@@ -280,6 +401,26 @@ Examples:
     )
     analyze_timing_cmd.configure_parser(analyze_parser)
 
+    audio_recon_parser = subparsers.add_parser(
+        "audio-recon",
+        help="Quick check that system audio reaches a recordable device",
+        description=(
+            "Records a short sample from an automatically chosen loopback-capable "
+            "device (override with INFOMUX_RECON_CAPTURE or --output-name). "
+            "Measures peak level; exits 0 if not silent, 2 if silent, 1 on error. "
+            "Optional --switch-output uses SwitchAudioSource (brew install switchaudio-osx)."
+        ),
+        epilog="""
+Examples:
+  infomux audio-recon
+  infomux audio-recon --duration 5 --json
+  infomux audio-recon --switch-output "infomux-capture" --sleep-after-switch 2
+  infomux audio-recon --output-name "infomux-aggregate-device" --play
+  infomux audio-recon --check-only
+""",
+    )
+    audio_recon_cmd.configure_parser(audio_recon_parser)
+
     return parser
 
 
@@ -293,8 +434,20 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         Exit code (0 for success, non-zero for errors)
     """
+    # Load .env config before parsing args and configuring logging.
+    load_dotenv()
+
     parser = create_parser()
-    args: Namespace = parser.parse_args(argv)
+    argv_list = argv if argv is not None else sys.argv[1:]
+
+    try:
+        args: Namespace = parser.parse_args(argv_list)
+    except SystemExit as e:
+        # argparse uses exit code 2 for parse errors.
+        code = e.code if isinstance(e.code, int) else 1
+        if code == 2:
+            _print_parse_tips(argv_list)
+        return code
 
     # Configure logging based on verbosity
     log_level = "INFO"
@@ -322,8 +475,12 @@ def main(argv: list[str] | None = None) -> int:
             return stream_cmd.execute(args)
         elif args.command == "cleanup":
             return cleanup_cmd.execute(args)
+        elif args.command == "cache":
+            return cache_cmd.execute(args)
         elif args.command == "analyze-timing":
             return analyze_timing_cmd.execute(args)
+        elif args.command == "audio-recon":
+            return audio_recon_cmd.execute(args)
         else:
             # This shouldn't happen due to required=True on subparsers
             parser.print_help(sys.stderr)

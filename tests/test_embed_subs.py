@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from infomux.steps.embed_subs import EmbedSubsStep, run
 from infomux.steps import StepError
+from infomux.steps.embed_subs import EmbedSubsStep, run
 
 
 class TestEmbedSubsStep:
@@ -77,7 +77,7 @@ class TestEmbedSubsStep:
                 output_file.write_bytes(b"fake video")
 
                 step = EmbedSubsStep()
-                outputs = step.execute(video_file, tmp_path)
+                step.execute(video_file, tmp_path)
 
                 # Verify it used transcript.srt
                 cmd = mock_run.call_args[0][0]
@@ -298,7 +298,7 @@ class TestRunFunction:
                 output_file = tmp_path / "video_burned.mp4"
                 output_file.write_bytes(b"fake video")
 
-                result = run(video_file, tmp_path, burn_in=True)
+                run(video_file, tmp_path, burn_in=True)
 
                 # Should use burn-in command
                 cmd = mock_run.call_args[0][0]

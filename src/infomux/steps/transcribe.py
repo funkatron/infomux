@@ -22,6 +22,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from infomux.audio_transcription import ensure_transcription_audio
 from infomux.config import get_tool_paths
 from infomux.log import get_logger
 from infomux.steps import StepError, StepResult, register_step
@@ -77,6 +78,11 @@ class TranscribeStep:
                 "curl -L -o ~/.local/share/infomux/models/whisper/ggml-base.en.bin "
                 "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
             )
+        if not tools.ffmpeg:
+            raise StepError(
+                self.name,
+                "ffmpeg not found. Install via: brew install ffmpeg",
+            )
 
         # whisper-cli uses -of for output prefix, then appends .txt
         output_prefix = output_dir / TRANSCRIPT_PREFIX
@@ -84,15 +90,28 @@ class TranscribeStep:
 
         logger.info("transcribing: %s", input_path.name)
         logger.debug("using model: %s", tools.whisper_model)
+        try:
+            transcription_audio = ensure_transcription_audio(
+                input_path=input_path,
+                output_dir=output_dir,
+                ffmpeg_path=tools.ffmpeg,
+            )
+        except RuntimeError as e:
+            raise StepError(self.name, f"failed to prepare transcription audio: {e}")
+
+        logger.debug("transcription audio: %s", transcription_audio.name)
 
         # Build whisper-cli command
         cmd = [
             str(tools.whisper_cli),
-            "-m", str(tools.whisper_model),
-            "-f", str(input_path),
-            "-of", str(output_prefix),  # Output file prefix
-            "-otxt",                     # Plain text output
-            "-np",                       # No progress (quiet)
+            "-m",
+            str(tools.whisper_model),
+            "-f",
+            str(transcription_audio),
+            "-of",
+            str(output_prefix),  # Output file prefix
+            "-otxt",  # Plain text output
+            "-np",  # No progress (quiet)
         ]
 
         logger.debug("running: %s", " ".join(cmd))
@@ -130,7 +149,7 @@ class TranscribeStep:
                         preview = first_line
                     logger.debug("transcript preview: %s", preview)
 
-            return [output_path]
+            return [output_path, transcription_audio]
 
         except FileNotFoundError:
             raise StepError(

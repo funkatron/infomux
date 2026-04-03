@@ -4,7 +4,7 @@ A local-first CLI for transcribing audio/video and capturing voice notes.
 
 **What it does:**
 - Transcribe any audio/video file to text
-- Record voice notes from your microphone with live transcription
+- Record voice notes (default: mic + loopback when available) with live transcription
 - Generate summaries using local LLMs (Ollama)
 - Keep everything on your machine — no cloud, no API keys
 
@@ -13,7 +13,7 @@ A local-first CLI for transcribing audio/video and capturing voice notes.
 infomux run ~/Downloads/episode-42.mp3
 # → ~/.local/share/infomux/runs/run-XXXXXX/transcript.txt
 
-# Record a voice memo with timestamps
+# Record a voice memo with timestamps (default: default input + loopback when available)
 infomux stream --duration 300
 # → audio.wav + transcript.srt/vtt/json
 
@@ -211,6 +211,13 @@ infomux run ~/Movies/lecture.mp4
 # Get a summary of a long recording
 infomux run --pipeline summarize 3hr-meeting.mp4
 
+# Get a summary using OpenAI (explicit external API call)
+INFOMUX_OPENAI_API_KEY=sk-... infomux run --pipeline summarize-openai 3hr-meeting.mp4
+
+# Override OpenAI model and API base URL via CLI flags
+INFOMUX_OPENAI_API_KEY=sk-... infomux run --pipeline summarize-openai \
+  --openai-model gpt-4o-mini --openai-base-url https://api.openai.com/v1 3hr-meeting.mp4
+
 # Summarize with smarter model and content hint
 infomux run --pipeline summarize --model qwen2.5:32b-instruct --content-type-hint meeting standup.mp4
 
@@ -254,6 +261,9 @@ infomux run --pipeline lyric-video --lyric-background-image ~/Pictures/album-art
 
 # Full analysis with searchable database
 infomux run --pipeline report-store weekly-standup.mp4
+
+# Full analysis using OpenAI for summary (explicit external API)
+INFOMUX_OPENAI_API_KEY=sk-... infomux run --pipeline report-openai weekly-standup.mp4
 
 # List all available pipelines (use inspect command)
 infomux inspect --list-pipelines
@@ -443,18 +453,78 @@ Would delete 4 run(s):
 Run with --force to actually delete these runs.
 ```
 
-### `infomux stream`
+### `infomux cache`
 
-Real-time audio capture and transcription from a microphone.
+Inspect and manage local **external service caches**.
+
+If you only run one command, run this:
 
 ```bash
-# See available microphones
+infomux cache external status
+```
+
+It tells you:
+- where the cache lives
+- how many entries exist
+- total disk usage
+
+```bash
+# Show provider, path, file count, and total size
+infomux cache external status
+
+# Print only the cache directory path (script-friendly)
+infomux cache external path
+
+# List cached files (one path per line)
+infomux cache external list
+
+# Delete cache files after interactive confirmation
+infomux cache external clear
+
+# Delete cache files immediately (no prompt)
+infomux cache external clear --yes
+
+# Output status/list as JSON
+infomux cache external status --json
+```
+
+**Common tasks**
+
+| Goal | Command | What you get |
+|------|---------|--------------|
+| Check cache health | `infomux cache external status` | Provider, cache path, file count, bytes |
+| Use in shell scripts | `infomux cache external status --json` | Machine-readable status JSON |
+| Find cache on disk | `infomux cache external path` | Absolute cache directory path |
+| Inspect entries | `infomux cache external list` | One cache file path per line |
+| Start fresh safely | `infomux cache external clear` | Confirmation prompt, then deletion |
+| Force clear in automation | `infomux cache external clear --yes` | No prompt, immediate deletion |
+
+**Notes:**
+- Cache is organized by domain; `external` is the current domain.
+- Within `external`, provider-aware handling is supported; currently `openai` is available.
+- Default provider cache location:
+  - `$XDG_CACHE_HOME/infomux/openai` (when `XDG_CACHE_HOME` is set)
+  - otherwise `~/.cache/infomux/openai`
+- Override cache path with `INFOMUX_OPENAI_CACHE_DIR`.
+
+### `infomux stream`
+
+Real-time audio capture and transcription. By default uses the system default **input** plus a **loopback** device when available (mic + system audio mix). Use `--list-devices` for IDs.
+
+```bash
+# See available input/output devices
 infomux stream --list-devices
 
-# Record with interactive device picker
+# Default capture (no prompts): default input + default loopback when available
 infomux stream
 
-# Use a specific microphone (by ID from --list-devices)
+# Interactive device picker with live meters
+infomux stream --prompt
+
+# Use specific input/output devices (IDs from --list-devices)
+infomux stream --input 1 --output 0
+
+# Legacy: single microphone only, no loopback (older CLI behavior)
 infomux stream --device 2
 
 # 5-minute voice memo
@@ -469,12 +539,24 @@ infomux stream --stop-word "end note"
 # Voice memo with summarization
 infomux stream --pipeline summarize
 
+# Voice memo with explicit external OpenAI reporting
+INFOMUX_OPENAI_API_KEY=sk-... infomux stream --pipeline report-openai
+
 # Meeting notes with auto-silence detection
-infomux stream --device 2 --silence 10 --pipeline summarize
+infomux stream --input 1 --silence 10 --pipeline summarize
 
 # Show available pipelines for stream
 infomux stream --list-pipelines
 ```
+
+**Device detection behavior:**
+- `--list-devices` prints separate **INPUTS** and **OUTPUTS** sections.
+- Devices with both input and output capability appear in both sections.
+- Output-only devices are marked `[output-only]`.
+- Loopback/virtual devices are preferred for system-audio capture.
+- Official recommendation for macOS loopback capture: `brew install blackhole-2ch`.
+- `infomux` expects loopback devices to behave like BlackHole 2ch (stable output capture source).
+- **`--device <id>`** remains for backward compatibility: it picks one **input** device only and does **not** record loopback (same behavior as older releases). Prefer **`--input` / `--output`** for directional capture.
 
 **Stop conditions:**
 - Press `Ctrl+C`
@@ -517,8 +599,10 @@ Stopping: stop word 'stop recording'
 |----------|-------------|-------|
 | `transcribe` | Plain text transcript (default) | extract_audio → transcribe |
 | `summarize` | Transcript + LLM summary | extract_audio → transcribe → summarize |
+| `summarize-openai` | Transcript + LLM summary via OpenAI (external API) | extract_audio → transcribe → summarize_openai |
 | `timed` | Word-level timestamps (SRT/VTT/JSON) | extract_audio → transcribe_timed |
 | `report` | Full analysis: text, timestamps, summary | ... → transcribe → transcribe_timed → summarize |
+| `report-openai` | Full analysis via OpenAI summary (external API) | ... → transcribe → transcribe_timed → summarize_openai |
 | `report-store` | Full analysis + searchable database | ... → summarize → store_sqlite |
 | `caption` | Soft subtitles (toggleable) | extract_audio → transcribe_timed → embed_subs |
 | `caption-burn` | Burned-in subtitles (permanent) | extract_audio → transcribe_timed → embed_subs |
@@ -544,6 +628,7 @@ infomux inspect --list-steps
 | `transcribe` | `audio.wav` | `transcript.txt` | whisper-cli |
 | `transcribe_timed` | `audio.wav` | `transcript.srt`, `.vtt`, `.json` | whisper-cli -dtw |
 | `summarize` | `transcript.txt` | `summary.md` | Ollama (chunked for long input) |
+| `summarize_openai` | `transcript.txt` | `summary.md` | OpenAI API (chunked for long input) |
 | `embed_subs` | video + `.srt` | `video_captioned.mp4` | ffmpeg |
 | `generate_video` | audio + `.srt` | `audio_with_subs.mp4` | ffmpeg |
 | `generate_lyric_video` | audio + `transcript.json` | `audio_lyric_video.mp4` | ffmpeg |
@@ -750,6 +835,9 @@ Every run produces a complete execution record:
 
 ### Environment Variables
 
+`infomux` also auto-loads a `.env` file from the current working directory
+at startup. Shell-exported variables still win over `.env` values.
+
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `INFOMUX_DATA_DIR` | Base directory for runs and models | `~/.local/share/infomux` |
@@ -759,6 +847,11 @@ Every run produces a complete execution record:
 | `INFOMUX_WHISPER_CLI_PATH` | Override whisper-cli binary location | *(auto-detected from PATH)* |
 | `INFOMUX_OLLAMA_MODEL` | Ollama model for summarization | `llama3.1:8b` |
 | `INFOMUX_OLLAMA_URL` | Ollama API URL | `http://localhost:11434` |
+| `INFOMUX_OPENAI_API_KEY` | API key for `summarize-openai` external summarization | *(required for `summarize-openai`)* |
+| `INFOMUX_OPENAI_MODEL` | OpenAI model for `summarize-openai` | `gpt-4o-mini` |
+| `INFOMUX_OPENAI_BASE_URL` | OpenAI API base URL | `https://api.openai.com/v1` |
+| `INFOMUX_OPENAI_CACHE` | Enable local request/response cache for OpenAI summarize calls | `true` |
+| `INFOMUX_OPENAI_CACHE_DIR` | Cache directory for OpenAI summaries | `$XDG_CACHE_HOME/infomux/openai` or `~/.cache/infomux/openai` |
 | `INFOMUX_CONTENT_TYPE_HINT` | Hint for content type (meeting, talk, etc.) | *(none)* |
 | `INFOMUX_S3_BUCKET` | S3 bucket for `store_s3` | *(required if using S3)* |
 | `INFOMUX_S3_PREFIX` | S3 key prefix | `infomux/` |
@@ -767,6 +860,15 @@ Every run produces a complete execution record:
 | `INFOMUX_OBSIDIAN_FOLDER` | Subfolder in vault for transcripts | `Transcripts` |
 | `INFOMUX_OBSIDIAN_TAGS` | Comma-separated default tags | `infomux,transcript` |
 | `INFOMUX_BEAR_TAGS` | Comma-separated default tags for Bear | `infomux,transcript` |
+| `INFOMUX_ENV_FILE` | Optional explicit path to dotenv file to load at startup | `./.env` |
+
+Example `.env`:
+
+```bash
+INFOMUX_OPENAI_API_KEY=sk-...
+INFOMUX_OPENAI_MODEL=gpt-4o-mini
+INFOMUX_LOG_LEVEL=INFO
+```
 
 ### Summarization Options
 
@@ -778,6 +880,22 @@ ollama pull qwen2.5:32b-instruct
 
 # Use it via CLI flag
 infomux run --pipeline summarize --model qwen2.5:32b-instruct meeting.mp4
+```
+
+Use OpenAI instead (explicitly external service):
+
+```bash
+export INFOMUX_OPENAI_API_KEY=sk-...
+infomux run --pipeline summarize-openai meeting.mp4
+```
+
+You can also override the OpenAI model and endpoint per run:
+
+```bash
+infomux run --pipeline summarize-openai \
+  --openai-model gpt-4o-mini \
+  --openai-base-url https://api.openai.com/v1 \
+  meeting.mp4
 ```
 
 **Content Type Hints**
@@ -880,6 +998,18 @@ infomux stream --list-devices
 ```
 
 On macOS, you may need to grant Terminal/your IDE microphone access in System Preferences → Privacy & Security → Microphone.
+
+If you want to capture system audio (not just mic input), install BlackHole 2ch and set it as output:
+
+```bash
+brew install blackhole-2ch
+```
+
+Then re-run:
+
+```bash
+infomux stream --list-devices
+```
 
 ### Lyric Video Features (EXPERIMENTAL)
 
@@ -1007,6 +1137,7 @@ src/infomux/
 - `transcribe` — whisper-cli → transcript.txt
 - `transcribe_timed` — whisper-cli -dtw → .srt/.vtt/.json
 - `summarize` — Ollama with chunking, content hints, `--model` override
+- `summarize_openai` — OpenAI API with chunking + local cache (requires `INFOMUX_OPENAI_API_KEY`)
 - `embed_subs` — ffmpeg subtitle embedding (soft or burned)
 - `store_json`, `store_markdown` — export formats
 - `store_sqlite` — searchable FTS5 database
@@ -1014,16 +1145,16 @@ src/infomux/
 - `store_obsidian`, `store_bear` — note app integration
 
 **Pipelines:**
-- `transcribe`, `summarize`, `timed`, `report`, `report-store`
+- `transcribe`, `summarize`, `summarize-openai`, `timed`, `report`, `report-openai`, `report-store`
 - `caption`, `caption-burn` — video subtitle embedding
 - `lyric-video`, `lyric-video-vocals`, `lyric-video-aligned` — **[EXPERIMENTAL]** word-level lyric videos
   - Requires: `demucs` (for vocal isolation) and/or `stable-ts` (for forced alignment)
   - See [Optional Dependencies](#optional-dependencies) for installation
 
 **Streaming:**
-- Real-time audio capture and transcription
+- Real-time audio capture and transcription (default input + loopback when available)
 - Multiple stop conditions (duration, silence, stop-word)
-- Audio device discovery and selection
+- Audio device discovery; **`--input` / `--output`**, **`--prompt`**, or legacy **`--device`**
 
 **Reproducibility:**
 - Model/seed recording for LLM outputs

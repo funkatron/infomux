@@ -407,10 +407,7 @@ Now provide the structured summary. Use EXACTLY these headings:
             else:
                 eta = ""
 
-            logger.info(
-                "chunk %d/%d (%d%%)%s",
-                i, total_chunks, pct, eta
-            )
+            logger.info("chunk %d/%d (%d%%)%s", i, total_chunks, pct, eta)
 
             prompt = CHUNK_EXTRACT_PROMPT.format(
                 chunk_num=i,
@@ -431,7 +428,8 @@ Now provide the structured summary. Use EXACTLY these headings:
         elapsed = time.time() - start_time
         logger.info(
             "combining %d chunk summaries (extraction took %.1fs)",
-            total_chunks, elapsed
+            total_chunks,
+            elapsed,
         )
         combined_extracts = "\n\n".join(chunk_summaries)
 
@@ -452,7 +450,8 @@ Now provide the structured summary. Use EXACTLY these headings:
         total_elapsed = time.time() - start_time
         logger.info(
             "summarization complete: %.1fs total (combine: %.1fs)",
-            total_elapsed, combine_time
+            total_elapsed,
+            combine_time,
         )
 
         return final_summary, total_tokens

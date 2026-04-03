@@ -106,17 +106,20 @@ def run_pipeline(
             started_at=datetime.now(UTC).isoformat(),
         )
         job.steps.append(step_record)
-        
+
         # Update job status to running if not already
         if job.status == JobStatus.PENDING.value:
             job.update_status(JobStatus.RUNNING)
-        
+
         # Save job so running status is visible for inspection
         from infomux.storage import save_job
+
         save_job(job)
 
         # Run the step via registry
-        result = run_step(step_name, input_path, run_dir, step_config if step_config else None)
+        result = run_step(
+            step_name, input_path, run_dir, step_config if step_config else None
+        )
 
         # Update step record
         step_record.status = "completed" if result.success else "failed"

@@ -10,13 +10,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from infomux.steps import StepError
 from infomux.steps.generate_lyric_video import (
     GenerateLyricVideoStep,
     PositionedWord,
     WordEntry,
     run,
 )
-from infomux.steps import StepError
 
 
 class TestGenerateLyricVideoStep:
@@ -91,11 +91,17 @@ class TestGenerateLyricVideoStep:
                     "tokens": [
                         {
                             "text": " Hello",
-                            "timestamps": {"from": "00:00:01,000", "to": "00:00:01,500"},
+                            "timestamps": {
+                                "from": "00:00:01,000",
+                                "to": "00:00:01,500",
+                            },
                         },
                         {
                             "text": "world",
-                            "timestamps": {"from": "00:00:01,500", "to": "00:00:02,000"},
+                            "timestamps": {
+                                "from": "00:00:01,500",
+                                "to": "00:00:02,000",
+                            },
                         },
                     ]
                 }
@@ -121,15 +127,24 @@ class TestGenerateLyricVideoStep:
                     "tokens": [
                         {
                             "text": " Hello",
-                            "timestamps": {"from": "00:00:01,000", "to": "00:00:01,500"},
+                            "timestamps": {
+                                "from": "00:00:01,000",
+                                "to": "00:00:01,500",
+                            },
                         },
                         {
                             "text": "world",
-                            "timestamps": {"from": "00:00:01,500", "to": "00:00:02,000"},
+                            "timestamps": {
+                                "from": "00:00:01,500",
+                                "to": "00:00:02,000",
+                            },
                         },
                         {
                             "text": " test",
-                            "timestamps": {"from": "00:00:02,000", "to": "00:00:02,500"},
+                            "timestamps": {
+                                "from": "00:00:02,000",
+                                "to": "00:00:02,500",
+                            },
                         },
                     ]
                 }
@@ -229,25 +244,25 @@ class TestGenerateLyricVideoStep:
     def test_sanitize_filename(self) -> None:
         """Sanitizes text for safe filenames."""
         step = GenerateLyricVideoStep()
-        
+
         # Test basic sanitization
         assert step._sanitize_filename("Hello world") == "Hello_world"
         assert step._sanitize_filename("test/word") == "testword"
         assert step._sanitize_filename("word:test") == "wordtest"
-        
+
         # Test unsafe characters
         assert step._sanitize_filename("word<test>") == "wordtest"
         assert step._sanitize_filename('word"test"') == "wordtest"
         assert step._sanitize_filename("word|test") == "wordtest"
-        
+
         # Test length limit
         long_text = "a" * 100
         assert len(step._sanitize_filename(long_text)) <= 50
-        
+
         # Test empty result fallback
         assert step._sanitize_filename("") == "word"
         assert step._sanitize_filename("...") == "word"
-        
+
         # Test Unicode replacement character removal
         assert "\ufffd" not in step._sanitize_filename("test\ufffdword")
 
@@ -262,7 +277,10 @@ class TestGenerateLyricVideoStep:
                     "tokens": [
                         {
                             "text": " Hello",
-                            "timestamps": {"from": "00:00:01,000", "to": "00:00:01,500"},
+                            "timestamps": {
+                                "from": "00:00:01,000",
+                                "to": "00:00:01,500",
+                            },
                         },
                     ]
                 }
@@ -278,11 +296,14 @@ class TestGenerateLyricVideoStep:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
 
             call_count = [0]
+
             def mock_run_side_effect(cmd, **kwargs):
                 call_count[0] += 1
                 # First call: ffprobe for duration
                 if call_count[0] == 1:
-                    return MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}')
+                    return MagicMock(
+                        returncode=0, stdout='{"format":{"duration":"10.5"}}'
+                    )
                 # Subsequent calls: word image generation (create PNG files)
                 if len(cmd) > 0:
                     for arg in cmd:
@@ -301,8 +322,11 @@ class TestGenerateLyricVideoStep:
                     output_file.write_bytes(b"fake video")
                 return MagicMock(returncode=0)
 
-            mock_run = MagicMock(side_effect=mock_run_side_effect)
-            with patch("infomux.steps.generate_lyric_video.subprocess.run", side_effect=mock_run_side_effect):
+            MagicMock(side_effect=mock_run_side_effect)
+            with patch(
+                "infomux.steps.generate_lyric_video.subprocess.run",
+                side_effect=mock_run_side_effect,
+            ):
                 step = GenerateLyricVideoStep()
                 outputs = step.execute(audio_file, tmp_path)
 
@@ -328,7 +352,10 @@ class TestGenerateLyricVideoStep:
                     "tokens": [
                         {
                             "text": " Hello",
-                            "timestamps": {"from": "00:00:01,000", "to": "00:00:01,500"},
+                            "timestamps": {
+                                "from": "00:00:01,000",
+                                "to": "00:00:01,500",
+                            },
                         },
                     ]
                 }
@@ -344,10 +371,13 @@ class TestGenerateLyricVideoStep:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
 
             call_count = [0]
+
             def mock_run_side_effect(cmd, **kwargs):
                 call_count[0] += 1
                 if call_count[0] == 1:
-                    return MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}')
+                    return MagicMock(
+                        returncode=0, stdout='{"format":{"duration":"10.5"}}'
+                    )
                 if len(cmd) > 0:
                     for arg in cmd:
                         if isinstance(arg, (str, Path)) and str(arg).endswith(".png"):
@@ -360,7 +390,10 @@ class TestGenerateLyricVideoStep:
                     output_file.write_bytes(b"fake video")
                 return MagicMock(returncode=0)
 
-            with patch("infomux.steps.generate_lyric_video.subprocess.run", side_effect=mock_run_side_effect):
+            with patch(
+                "infomux.steps.generate_lyric_video.subprocess.run",
+                side_effect=mock_run_side_effect,
+            ):
                 step = GenerateLyricVideoStep()
                 outputs = step.execute(audio_file, tmp_path)
 
@@ -400,7 +433,10 @@ class TestRunFunction:
                     "tokens": [
                         {
                             "text": " Hello",
-                            "timestamps": {"from": "00:00:01,000", "to": "00:00:01,500"},
+                            "timestamps": {
+                                "from": "00:00:01,000",
+                                "to": "00:00:01,500",
+                            },
                         },
                     ]
                 }
@@ -416,11 +452,14 @@ class TestRunFunction:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
 
             call_count = [0]
+
             def mock_run_side_effect(cmd, **kwargs):
                 call_count[0] += 1
                 # First call: ffprobe for duration
                 if call_count[0] == 1:
-                    return MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}')
+                    return MagicMock(
+                        returncode=0, stdout='{"format":{"duration":"10.5"}}'
+                    )
                 # Subsequent calls: word image generation or final video
                 # Create output file if it's an image generation call
                 if len(cmd) > 0:
@@ -436,7 +475,10 @@ class TestRunFunction:
                     output_file.write_bytes(b"fake video")
                 return MagicMock(returncode=0)
 
-            with patch("infomux.steps.generate_lyric_video.subprocess.run", side_effect=mock_run_side_effect):
+            with patch(
+                "infomux.steps.generate_lyric_video.subprocess.run",
+                side_effect=mock_run_side_effect,
+            ):
                 result = run(audio_file, tmp_path)
 
                 assert result.name == "generate_lyric_video"
@@ -456,7 +498,10 @@ class TestRunFunction:
                     "tokens": [
                         {
                             "text": " Hello",
-                            "timestamps": {"from": "00:00:01,000", "to": "00:00:01,500"},
+                            "timestamps": {
+                                "from": "00:00:01,000",
+                                "to": "00:00:01,500",
+                            },
                         },
                     ]
                 }
@@ -472,11 +517,14 @@ class TestRunFunction:
             mock_tools.return_value = MagicMock(ffmpeg=Path("/usr/bin/ffmpeg"))
 
             call_count = [0]
+
             def mock_run_side_effect(cmd, **kwargs):
                 call_count[0] += 1
                 # First call: ffprobe for duration
                 if call_count[0] == 1:
-                    return MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}')
+                    return MagicMock(
+                        returncode=0, stdout='{"format":{"duration":"10.5"}}'
+                    )
                 # Subsequent calls: word image generation or final video
                 if len(cmd) > 0:
                     for i, arg in enumerate(cmd):
@@ -490,7 +538,10 @@ class TestRunFunction:
                     output_file.write_bytes(b"fake video")
                 return MagicMock(returncode=0)
 
-            with patch("infomux.steps.generate_lyric_video.subprocess.run", side_effect=mock_run_side_effect):
+            with patch(
+                "infomux.steps.generate_lyric_video.subprocess.run",
+                side_effect=mock_run_side_effect,
+            ):
                 result = run(
                     audio_file,
                     tmp_path,

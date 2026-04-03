@@ -8,8 +8,6 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from infomux.steps.generate_lyric_video import (
     GenerateLyricVideoStep,
     PositionedWord,
@@ -30,11 +28,17 @@ class TestOverlayApproach:
                     "tokens": [
                         {
                             "text": " Hello",
-                            "timestamps": {"from": "00:00:01,000", "to": "00:00:01,500"},
+                            "timestamps": {
+                                "from": "00:00:01,000",
+                                "to": "00:00:01,500",
+                            },
                         },
                         {
                             "text": "world",
-                            "timestamps": {"from": "00:00:01,500", "to": "00:00:02,000"},
+                            "timestamps": {
+                                "from": "00:00:01,500",
+                                "to": "00:00:02,000",
+                            },
                         },
                     ]
                 }
@@ -64,7 +68,7 @@ class TestOverlayApproach:
             with patch("infomux.steps.generate_lyric_video.subprocess.run") as mock_run:
                 # Track calls and create mock output files
                 call_count = [0]
-                
+
                 def mock_run_side_effect(cmd, **kwargs):
                     call_count[0] += 1
                     # Extract output path from command (last argument should be output file)
@@ -73,7 +77,7 @@ class TestOverlayApproach:
                         output_path.parent.mkdir(parents=True, exist_ok=True)
                         output_path.write_bytes(b"fake png")
                     return MagicMock(returncode=0)
-                
+
                 mock_run.side_effect = mock_run_side_effect
 
                 word_image_paths = step._generate_word_images(
@@ -154,18 +158,22 @@ class TestOverlayApproach:
 
         # Verify overlay filters are chained correctly
         assert ";" in filter_content  # Filters separated by semicolons
-        
+
         # CRITICAL: Verify no double brackets (e.g., [[v1]] should be [v1])
-        assert "[[" not in filter_content, f"Found double brackets in filter: {filter_content}"
+        assert "[[" not in filter_content, (
+            f"Found double brackets in filter: {filter_content}"
+        )
         # Verify intermediate labels are correct format
         assert "[v1]" in filter_content  # Should have [v1] not [[v1]]
         # Verify overlay uses 'enable' parameter (not 'if' - overlay doesn't support 'if')
         assert "enable=" in filter_content
-        assert "if=" not in filter_content or "enable=" in filter_content  # Prefer enable
+        assert (
+            "if=" not in filter_content or "enable=" in filter_content
+        )  # Prefer enable
 
     def test_overlay_filter_syntax(self) -> None:
         """Test that overlay filter syntax is correct."""
-        step = GenerateLyricVideoStep()
+        GenerateLyricVideoStep()
 
         # Create test data
         base_input = "[1:v]"
@@ -200,11 +208,17 @@ class TestOverlayApproach:
                     "tokens": [
                         {
                             "text": " Hello",
-                            "timestamps": {"from": "00:00:01,000", "to": "00:00:01,500"},
+                            "timestamps": {
+                                "from": "00:00:01,000",
+                                "to": "00:00:01,500",
+                            },
                         },
                         {
                             "text": "world",
-                            "timestamps": {"from": "00:00:01,500", "to": "00:00:02,000"},
+                            "timestamps": {
+                                "from": "00:00:01,500",
+                                "to": "00:00:02,000",
+                            },
                         },
                     ]
                 }
@@ -226,7 +240,9 @@ class TestOverlayApproach:
                 # 2-N. ffmpeg for each word image generation
                 # Last. ffmpeg for final video generation
                 call_results = [
-                    MagicMock(returncode=0, stdout='{"format":{"duration":"10.5"}}'),  # ffprobe
+                    MagicMock(
+                        returncode=0, stdout='{"format":{"duration":"10.5"}}'
+                    ),  # ffprobe
                 ]
                 # Add results for word image generation (2 words)
                 call_results.extend([MagicMock(returncode=0)] * 2)
@@ -242,14 +258,20 @@ class TestOverlayApproach:
                 # Mock word image files being created
                 def side_effect_create_files(cmd, **kwargs):
                     # If this is an image generation call, create the output file
-                    if "word_" in " ".join(str(c) for c in cmd) and ".png" in " ".join(str(c) for c in cmd):
+                    if "word_" in " ".join(str(c) for c in cmd) and ".png" in " ".join(
+                        str(c) for c in cmd
+                    ):
                         # Extract output path from command
-                        output_idx = cmd.index("-frames:v") + 2 if "-frames:v" in cmd else -1
+                        output_idx = (
+                            cmd.index("-frames:v") + 2 if "-frames:v" in cmd else -1
+                        )
                         if output_idx > 0 and output_idx < len(cmd):
                             output_path = Path(cmd[output_idx])
                             output_path.parent.mkdir(parents=True, exist_ok=True)
                             output_path.write_bytes(b"fake png")
-                    return call_results.pop(0) if call_results else MagicMock(returncode=0)
+                    return (
+                        call_results.pop(0) if call_results else MagicMock(returncode=0)
+                    )
 
                 mock_run.side_effect = side_effect_create_files
 
@@ -265,4 +287,6 @@ class TestOverlayApproach:
                     assert len(outputs) == 1
                 except Exception as e:
                     # Expected to fail in test environment, but verify error is not about filter syntax
-                    assert "filter" not in str(e).lower() or "syntax" not in str(e).lower()
+                    assert (
+                        "filter" not in str(e).lower() or "syntax" not in str(e).lower()
+                    )

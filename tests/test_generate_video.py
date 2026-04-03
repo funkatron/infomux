@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from infomux.steps.generate_video import GenerateVideoStep, run
 from infomux.steps import StepError
+from infomux.steps.generate_video import GenerateVideoStep, run
 
 
 class TestGenerateVideoStep:
@@ -80,7 +80,7 @@ class TestGenerateVideoStep:
                 output_file.write_bytes(b"fake video")
 
                 step = GenerateVideoStep()
-                outputs = step.execute(audio_file, tmp_path)
+                step.execute(audio_file, tmp_path)
 
                 # Verify it used transcript.srt (check second call - ffmpeg)
                 cmd = mock_run.call_args_list[1][0][0]
@@ -288,7 +288,7 @@ class TestRunFunction:
                 output_file = tmp_path / "audio_with_subs.mp4"
                 output_file.write_bytes(b"fake video")
 
-                result = run(audio_file, tmp_path, background_image=str(bg_image))
+                run(audio_file, tmp_path, background_image=str(bg_image))
 
                 # Should use image background (check second call - ffmpeg)
                 cmd = mock_run.call_args_list[1][0][0]
@@ -314,7 +314,7 @@ class TestRunFunction:
                 output_file = tmp_path / "audio_with_subs.mp4"
                 output_file.write_bytes(b"fake video")
 
-                result = run(audio_file, tmp_path, background_color="blue")
+                run(audio_file, tmp_path, background_color="blue")
 
                 # Should use blue background (check second call - ffmpeg)
                 cmd = mock_run.call_args_list[1][0][0]
@@ -340,7 +340,7 @@ class TestRunFunction:
                 output_file = tmp_path / "audio_with_subs.mp4"
                 output_file.write_bytes(b"fake video")
 
-                result = run(audio_file, tmp_path, video_size="1280x720")
+                run(audio_file, tmp_path, video_size="1280x720")
 
                 # Should use custom size (check second call - ffmpeg)
                 cmd = mock_run.call_args_list[1][0][0]

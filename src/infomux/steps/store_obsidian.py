@@ -78,7 +78,7 @@ def _generate_obsidian_note(data: RunData, tags: list[str]) -> str:
     lines.append(f"date: {data.created_at[:10]}")
     lines.append(f"created: {data.created_at[:19].replace('T', ' ')}")
     if data.input_path:
-        lines.append(f"source: \"{Path(data.input_path).name}\"")
+        lines.append(f'source: "{Path(data.input_path).name}"')
     if data.pipeline:
         lines.append(f"pipeline: {data.pipeline}")
     if data.duration_seconds:

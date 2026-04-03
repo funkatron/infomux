@@ -147,6 +147,20 @@ def configure_parser(parser: ArgumentParser) -> None:
         "Overrides the default model. Example: qwen2.5:32b-instruct, llama3.2:3b",
     )
     parser.add_argument(
+        "--openai-model",
+        type=str,
+        default=None,
+        help="OpenAI model for summarize_openai-based pipelines. "
+        "Overrides INFOMUX_OPENAI_MODEL. Example: gpt-4o-mini, gpt-4.1-mini",
+    )
+    parser.add_argument(
+        "--openai-base-url",
+        type=str,
+        default=None,
+        help="OpenAI API base URL for summarize_openai-based pipelines. "
+        "Overrides INFOMUX_OPENAI_BASE_URL. Default: https://api.openai.com/v1",
+    )
+    parser.add_argument(
         "--content-type-hint",
         type=str,
         default=None,
@@ -431,23 +445,35 @@ def execute(args: Namespace) -> int:
     run_dir = get_run_dir(job.id)
     if not run_dir.exists():
         run_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Configure logging to also write to a file in the run directory
     log_file = run_dir / "run.log"
     configure_logging(log_file=log_file)
-    
+
     logger.info("created run: %s", job.id)
     logger.debug("run directory: %s", run_dir)
 
     # Set model override if specified
     if args.model:
         import os
+
         os.environ["INFOMUX_OLLAMA_MODEL"] = args.model
         logger.debug("using model: %s", args.model)
+    if args.openai_model:
+        import os
+
+        os.environ["INFOMUX_OPENAI_MODEL"] = args.openai_model
+        logger.debug("using OpenAI model: %s", args.openai_model)
+    if args.openai_base_url:
+        import os
+
+        os.environ["INFOMUX_OPENAI_BASE_URL"] = args.openai_base_url
+        logger.debug("using OpenAI base URL: %s", args.openai_base_url)
 
     # Set content type hint if specified
     if args.content_type_hint:
         import os
+
         os.environ["INFOMUX_CONTENT_TYPE_HINT"] = args.content_type_hint
         logger.debug("content type hint: %s", args.content_type_hint)
 
@@ -483,16 +509,18 @@ def execute(args: Namespace) -> int:
         step_configs["generate_video"] = generate_video_config
 
     # Lyric video generation config
-    if any([
-        args.lyric_font_name,
-        args.lyric_font_file,
-        args.lyric_font_size,
-        args.lyric_font_color,
-        args.lyric_position,
-        args.lyric_word_spacing,
-        args.lyric_background_gradient,
-        args.lyric_background_image,
-    ]):
+    if any(
+        [
+            args.lyric_font_name,
+            args.lyric_font_file,
+            args.lyric_font_size,
+            args.lyric_font_color,
+            args.lyric_position,
+            args.lyric_word_spacing,
+            args.lyric_background_gradient,
+            args.lyric_background_image,
+        ]
+    ):
         lyric_video_config = step_configs.get("generate_lyric_video", {})
         if args.lyric_font_name:
             lyric_video_config["font_name"] = args.lyric_font_name
@@ -522,9 +550,26 @@ def execute(args: Namespace) -> int:
         step_configs["generate_lyric_video"] = lyric_video_config
 
     # Execute pipeline
-    success = run_pipeline(
-        job, run_dir, pipeline=pipeline, step_names=step_names, step_configs=step_configs
-    )
+    try:
+        success = run_pipeline(
+            job,
+            run_dir,
+            pipeline=pipeline,
+            step_names=step_names,
+            step_configs=step_configs,
+        )
+    except KeyboardInterrupt:
+        logger.info("run interrupted by user")
+        for step in reversed(job.steps):
+            if step.status == "running":
+                step.status = "interrupted"
+                step.completed_at = datetime.now(UTC).isoformat()
+                step.error = "interrupted by user"
+                break
+        job.update_status(JobStatus.INTERRUPTED, "interrupted by user")
+        save_job(job)
+        print(run_dir, file=sys.stdout)
+        return 130
 
     # Update final status
     if success:
@@ -590,10 +635,14 @@ def _check_dependencies() -> int:
     # EasyOCR (optional, better quality with GPU support)
     try:
         import importlib.util
+
         if importlib.util.find_spec("easyocr") is not None:
             import torch
+
             # Check for GPU acceleration
-            has_mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+            has_mps = (
+                hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+            )
             has_cuda = torch.cuda.is_available()
             gpu_status = ""
             if has_mps:
@@ -610,7 +659,6 @@ def _check_dependencies() -> int:
         print("○ EasyOCR: NOT FOUND (optional, for better OCR quality)")
         print("  Install: pip install easyocr")
         print("  For Apple Silicon GPU: pip install torch torchvision (Metal support)")
-
 
     print()
 

@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from infomux.steps.generate_lyric_video import (
     GenerateLyricVideoStep,
     PositionedWord,
@@ -21,7 +19,7 @@ class TestOverlayFilterSyntax:
     def test_overlay_uses_enable_not_if(self, tmp_path: Path) -> None:
         """
         CRITICAL: Overlay filter must use 'enable', not 'if'.
-        
+
         FFmpeg's overlay filter does NOT support 'if' parameter.
         This test will fail if we accidentally use 'if' instead of 'enable'.
         """
@@ -89,7 +87,7 @@ class TestOverlayFilterSyntax:
     def test_no_double_brackets(self, tmp_path: Path) -> None:
         """
         CRITICAL: No double brackets in filter chain.
-        
+
         Filter labels should be [v1], [v2], etc., not [[v1]], [[v2]].
         """
         step = GenerateLyricVideoStep()
@@ -97,7 +95,9 @@ class TestOverlayFilterSyntax:
         # Create many words to test chaining
         positioned_words = [
             PositionedWord(
-                word=WordEntry(text=f"word{i}", start_ms=1000 + i * 100, end_ms=1500 + i * 100),
+                word=WordEntry(
+                    text=f"word{i}", start_ms=1000 + i * 100, end_ms=1500 + i * 100
+                ),
                 x=100,
                 y=540 + i * 10,
                 line=i,
@@ -145,7 +145,7 @@ class TestOverlayFilterSyntax:
     def test_filter_chain_format_with_many_words(self, tmp_path: Path) -> None:
         """
         Test filter chain format with many words (like real-world usage).
-        
+
         This simulates the actual error case with 162 words.
         """
         step = GenerateLyricVideoStep()
@@ -166,7 +166,11 @@ class TestOverlayFilterSyntax:
         ]
 
         word_image_paths = [
-            (pw, tmp_path / f"word_{i:04d}_{pw.word.text}_{step.font_name}_{step.font_size}.png")
+            (
+                pw,
+                tmp_path
+                / f"word_{i:04d}_{pw.word.text}_{step.font_name}_{step.font_size}.png",
+            )
             for i, pw in enumerate(positioned_words)
         ]
 
@@ -193,7 +197,9 @@ class TestOverlayFilterSyntax:
         # Verify all critical requirements
         assert "[[" not in filter_content, "Double brackets found!"
         assert "enable=" in filter_content, "Missing 'enable' parameter!"
-        assert "if=" not in filter_content or "enable=" in filter_content, "Found 'if=' instead of 'enable'!"
+        assert "if=" not in filter_content or "enable=" in filter_content, (
+            "Found 'if=' instead of 'enable'!"
+        )
         assert "[1:v]" in filter_content, "Missing background video input!"
         assert "[out]" in filter_content, "Missing output label!"
 
@@ -206,12 +212,14 @@ class TestOverlayFilterSyntax:
             assert f"[v{i}]" in filter_content, f"Missing intermediate label [v{i}]"
 
         # Verify last overlay outputs to [out]
-        assert filter_content.endswith("[out]") or "[out]" in filter_content.split(";")[-1]
+        assert (
+            filter_content.endswith("[out]") or "[out]" in filter_content.split(";")[-1]
+        )
 
     def test_filter_syntax_matches_ffmpeg_requirements(self, tmp_path: Path) -> None:
         """
         Test that filter syntax matches FFmpeg's exact requirements.
-        
+
         This is a comprehensive syntax check.
         """
         step = GenerateLyricVideoStep()
@@ -225,9 +233,7 @@ class TestOverlayFilterSyntax:
             )
         ]
 
-        word_image_paths = [
-            (positioned_words[0], tmp_path / "word_0000.png")
-        ]
+        word_image_paths = [(positioned_words[0], tmp_path / "word_0000.png")]
         word_image_paths[0][1].write_bytes(b"fake png")
 
         cmd = step._build_overlay_command(

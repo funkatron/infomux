@@ -135,6 +135,26 @@ SUMMARIZE_PIPELINE = PipelineDef(
     ],
 )
 
+# Explicit external summarization via OpenAI API
+SUMMARIZE_OPENAI_PIPELINE = PipelineDef(
+    name="summarize-openai",
+    description="Extract audio, transcribe, and summarize using OpenAI (external API)",
+    steps=[
+        StepDef(
+            name="extract_audio",
+            input_from=None,
+        ),
+        StepDef(
+            name="transcribe",
+            input_from="extract_audio",
+        ),
+        StepDef(
+            name="summarize_openai",
+            input_from="transcribe",  # Uses transcript.txt
+        ),
+    ],
+)
+
 # Timed transcription: word-level timestamps without video embedding
 TIMED_PIPELINE = PipelineDef(
     name="timed",
@@ -212,6 +232,30 @@ REPORT_PIPELINE = PipelineDef(
         ),
         StepDef(
             name="summarize",
+            input_from="transcribe",  # Uses transcript.txt
+        ),
+    ],
+)
+
+# Full report with OpenAI summarization (external API)
+REPORT_OPENAI_PIPELINE = PipelineDef(
+    name="report-openai",
+    description="Full analysis: transcript, timestamps, and OpenAI summary (external API)",
+    steps=[
+        StepDef(
+            name="extract_audio",
+            input_from=None,
+        ),
+        StepDef(
+            name="transcribe",
+            input_from="extract_audio",
+        ),
+        StepDef(
+            name="transcribe_timed",
+            input_from="extract_audio",  # Also uses audio.wav
+        ),
+        StepDef(
+            name="summarize_openai",
             input_from="transcribe",  # Uses transcript.txt
         ),
     ],
@@ -322,7 +366,9 @@ LYRIC_VIDEO_ISOLATED_PIPELINE = PipelineDef(
         StepDef(
             name="isolate_vocals",
             input_from=None,  # Isolate vocals directly from original input (better quality)
-            config={"tool": "demucs"},  # Use Demucs for better quality (requires torchcodec)
+            config={
+                "tool": "demucs"
+            },  # Use Demucs for better quality (requires torchcodec)
         ),
         StepDef(
             name="transcribe_timed",
@@ -387,10 +433,12 @@ LYRIC_VIDEO_ALIGNED_ISOLATED_PIPELINE = PipelineDef(
 PIPELINES: dict[str, PipelineDef] = {
     "transcribe": DEFAULT_PIPELINE,
     "summarize": SUMMARIZE_PIPELINE,
+    "summarize-openai": SUMMARIZE_OPENAI_PIPELINE,
     "timed": TIMED_PIPELINE,
     "caption": CAPTION_PIPELINE,
     "caption-burn": CAPTION_BURN_PIPELINE,
     "report": REPORT_PIPELINE,
+    "report-openai": REPORT_OPENAI_PIPELINE,
     "report-store": REPORT_STORE_PIPELINE,
     "audio-to-video": AUDIO_TO_VIDEO_PIPELINE,
     "web-summarize": WEB_SUMMARIZE_PIPELINE,

@@ -17,7 +17,6 @@ import pytest
 
 from infomux.steps.storage import RunData, Segment, format_duration, format_timestamp
 
-
 # =============================================================================
 # Test RunData (common storage API)
 # =============================================================================
@@ -243,16 +242,15 @@ class TestStoreSqlite:
 
     def test_init_db_creates_tables(self):
         """_init_db creates expected tables."""
-        from infomux.steps.store_sqlite import _init_db
         import sqlite3
+
+        from infomux.steps.store_sqlite import _init_db
 
         conn = sqlite3.connect(":memory:")
         _init_db(conn)
 
         # Check tables exist
-        cursor = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )
+        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {row[0] for row in cursor.fetchall()}
 
         assert "runs" in tables
@@ -265,8 +263,9 @@ class TestStoreSqlite:
 
     def test_store_run_inserts_data(self, tmp_path):
         """_store_run inserts run data correctly."""
-        from infomux.steps.store_sqlite import _init_db, _store_run
         import sqlite3
+
+        from infomux.steps.store_sqlite import _init_db, _store_run
 
         # Setup
         job = {
@@ -331,8 +330,8 @@ class TestStoreS3:
 
     def test_get_s3_config_requires_bucket(self, monkeypatch):
         """Raises StepError if INFOMUX_S3_BUCKET not set."""
-        from infomux.steps.store_s3 import _get_s3_config
         from infomux.steps import StepError
+        from infomux.steps.store_s3 import _get_s3_config
 
         monkeypatch.delenv("INFOMUX_S3_BUCKET", raising=False)
 
@@ -405,8 +404,8 @@ class TestStorePostgres:
 
     def test_get_postgres_url_requires_env(self, monkeypatch):
         """Raises StepError if INFOMUX_POSTGRES_URL not set."""
-        from infomux.steps.store_postgres import _get_postgres_url
         from infomux.steps import StepError
+        from infomux.steps.store_postgres import _get_postgres_url
 
         monkeypatch.delenv("INFOMUX_POSTGRES_URL", raising=False)
 
@@ -426,7 +425,7 @@ class TestStorePostgres:
     def test_execute_connects_and_stores(self, tmp_path, monkeypatch):
         """Execute connects to postgres and stores data."""
         # Skip if psycopg2 not installed
-        psycopg2 = pytest.importorskip("psycopg2")
+        pytest.importorskip("psycopg2")
 
         from infomux.steps.store_postgres import StorePostgresStep
 
@@ -462,8 +461,8 @@ class TestStoreObsidian:
 
     def test_get_obsidian_config_requires_vault(self, monkeypatch):
         """Raises StepError if INFOMUX_OBSIDIAN_VAULT not set."""
-        from infomux.steps.store_obsidian import _get_obsidian_config
         from infomux.steps import StepError
+        from infomux.steps.store_obsidian import _get_obsidian_config
 
         monkeypatch.delenv("INFOMUX_OBSIDIAN_VAULT", raising=False)
 
@@ -634,8 +633,8 @@ class TestStoreBear:
 
     def test_execute_fails_on_non_macos(self, tmp_path):
         """Execute fails gracefully on non-macOS."""
-        from infomux.steps.store_bear import StoreBearStep
         from infomux.steps import StepError
+        from infomux.steps.store_bear import StoreBearStep
 
         job = {"id": "run-123", "created_at": "2026-01-10", "steps": []}
         (tmp_path / "job.json").write_text(json.dumps(job))

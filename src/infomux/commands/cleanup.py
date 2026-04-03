@@ -7,10 +7,10 @@ or runs matching specific criteria.
 
 Usage:
     infomux cleanup --dry-run              # Preview what would be deleted
-    infomux cleanup --orphaned             # Delete runs without job.json
-    infomux cleanup --status running       # Delete runs with specific status
-    infomux cleanup --older-than 30d       # Delete runs older than 30 days
-    infomux cleanup --force                # Actually delete (required)
+    infomux cleanup --orphaned             # Preview orphaned runs
+    infomux cleanup --status running       # Preview runs with specific status
+    infomux cleanup --older-than 30d       # Preview runs older than 30 days
+    infomux cleanup --force --status running  # Actually delete matches
 """
 
 from __future__ import annotations
@@ -37,13 +37,13 @@ def configure_parser(parser: ArgumentParser) -> None:
         "--dry-run",
         action="store_true",
         help="Preview what would be deleted without actually deleting. "
-        "Always use this first to see what would be removed. Shows run IDs and reasons.",
+        "This is now the default unless --force is passed. Shows run IDs and reasons.",
     )
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Actually delete runs. Required to perform deletion (unless using --dry-run). "
-        "This is a safety measure to prevent accidental deletion.",
+        help="Actually delete runs instead of previewing them. "
+        "Without --force, cleanup runs in dry-run mode by default.",
     )
     parser.add_argument(
         "--orphaned",
@@ -104,6 +104,8 @@ def parse_time_spec(spec: str) -> timedelta:
         number = int(spec[:-1])
     except ValueError:
         raise ValueError(f"invalid number in time specification: {spec[:-1]}")
+    if number <= 0:
+        raise ValueError(f"time value must be > 0: {number}")
 
     unit = spec[-1]
     if unit == "d":
@@ -126,15 +128,13 @@ def execute(args: Namespace) -> int:
     Returns:
         Exit code (0 for success, non-zero for errors).
     """
-    # Require either --dry-run or --force
-    if not args.dry_run and not args.force:
-        logger.error("either --dry-run or --force is required")
-        logger.error("use --dry-run to preview what would be deleted")
-        return 1
+    dry_run = args.dry_run or not args.force
 
     # Require at least one filter
     if not any([args.orphaned, args.status, args.older_than]):
-        logger.error("at least one filter is required: --orphaned, --status, or --older-than")
+        logger.error(
+            "at least one filter is required: --orphaned, --status, or --older-than"
+        )
         return 1
 
     runs_dir = get_runs_dir()
@@ -180,56 +180,49 @@ def execute(args: Namespace) -> int:
         if job_path.exists():
             try:
                 job = load_job(run_id)
-
-                # Check status filter
-                if args.status and job.status == args.status:
-                    # Additional check: if min_age is set, verify the run is old enough
-                    if min_age_delta:
-                        try:
-                            created_str = job.created_at.replace("Z", "+00:00")
-                            created_at = datetime.fromisoformat(created_str)
-                            if created_at.tzinfo is None:
-                                created_at = created_at.replace(tzinfo=UTC)
-                            now = datetime.now(UTC)
-                            age = now - created_at
-                            if age < min_age_delta:
-                                logger.debug("skipping %s: too recent (age: %s)", run_id, age)
-                                continue
-                        except (ValueError, AttributeError) as e:
-                            logger.debug("could not parse date for %s: %s", run_id, e)
-                            # If we can't parse the date, skip the min_age check
-                            pass
-
-                    runs_to_delete.append((run_id, f"status: {job.status}"))
+                # Status and age-based filters are conjunctive when combined.
+                if not args.status and not older_than_delta:
                     continue
 
-                # Check age filter
-                if older_than_delta:
+                status_match = args.status is None or job.status == args.status
+                if not status_match:
+                    continue
+
+                age = None
+                if older_than_delta or min_age_delta:
                     try:
-                        # Parse ISO format timestamp
                         created_str = job.created_at.replace("Z", "+00:00")
                         created_at = datetime.fromisoformat(created_str)
-                        # Ensure timezone-aware
                         if created_at.tzinfo is None:
                             created_at = created_at.replace(tzinfo=UTC)
-                        # Get current time in UTC
-                        now = datetime.now(UTC)
-                        age = now - created_at
-                        if age > older_than_delta:
-                            # Additional check: if min_age is set, verify the run is old enough
-                            if min_age_delta and age < min_age_delta:
-                                logger.debug("skipping %s: too recent (age: %s)", run_id, age)
-                                continue
-
-                            runs_to_delete.append((run_id, f"older than {args.older_than} (age: {age.days}d)"))
+                        age = datetime.now(UTC) - created_at
                     except (ValueError, AttributeError) as e:
                         logger.debug("could not parse date for %s: %s", run_id, e)
                         continue
 
+                if older_than_delta and (age is None or age <= older_than_delta):
+                    continue
+                if min_age_delta and (age is None or age < min_age_delta):
+                    logger.debug("skipping %s: too recent (age: %s)", run_id, age)
+                    continue
+
+                reason_parts = []
+                if args.status:
+                    reason_parts.append(f"status: {job.status}")
+                if older_than_delta and age is not None:
+                    reason_parts.append(
+                        f"older than {args.older_than} (age: {age.days}d)"
+                    )
+                if not reason_parts:
+                    reason_parts.append("matched filters")
+                runs_to_delete.append((run_id, ", ".join(reason_parts)))
+
             except Exception as e:
                 # If we can't load the job, it might be corrupted
                 if args.orphaned:
-                    runs_to_delete.append((run_id, f"orphaned (corrupted job.json: {e})"))
+                    runs_to_delete.append(
+                        (run_id, f"orphaned (corrupted job.json: {e})")
+                    )
                 else:
                     logger.debug("skipping %s: could not load job: %s", run_id, e)
 
@@ -241,7 +234,7 @@ def execute(args: Namespace) -> int:
     # Sort by run_id for consistent output
     runs_to_delete.sort(key=lambda x: x[0])
 
-    if args.dry_run:
+    if dry_run:
         print(f"Would delete {len(runs_to_delete)} run(s):", file=sys.stdout)
         print()
         for run_id, reason in runs_to_delete:
