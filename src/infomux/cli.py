@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from infomux import __version__
 from infomux.commands import analyze_timing as analyze_timing_cmd
+from infomux.commands import audio_recon as audio_recon_cmd
 from infomux.commands import cache as cache_cmd
 from infomux.commands import cleanup as cleanup_cmd
 from infomux.commands import inspect as inspect_cmd
@@ -44,6 +45,7 @@ def _print_parse_tips(argv: list[str]) -> None:
         "cleanup",
         "cache",
         "analyze-timing",
+        "audio-recon",
     }
     first_token = argv[0] if argv else None
 
@@ -60,7 +62,7 @@ def _print_parse_tips(argv: list[str]) -> None:
     if first_token not in known_commands:
         print("\nUnknown command. Available commands:", file=sys.stderr)
         print(
-            "  run, inspect, resume, stream, cleanup, cache, analyze-timing",
+            "  run, inspect, resume, stream, cleanup, cache, analyze-timing, audio-recon",
             file=sys.stderr,
         )
         print("  infomux --help", file=sys.stderr)
@@ -118,6 +120,9 @@ Examples:
   infomux stream --prompt
   infomux stream --input 0 --output 1 --silence 5
   infomux stream --pipeline summarize
+
+  # Quick loopback / system-audio check (auto device selection)
+  infomux audio-recon
 
   # Inspect and manage runs
   infomux inspect --list
@@ -396,6 +401,26 @@ Examples:
     )
     analyze_timing_cmd.configure_parser(analyze_parser)
 
+    audio_recon_parser = subparsers.add_parser(
+        "audio-recon",
+        help="Quick check that system audio reaches a recordable device",
+        description=(
+            "Records a short sample from an automatically chosen loopback-capable "
+            "device (override with INFOMUX_RECON_CAPTURE or --output-name). "
+            "Measures peak level; exits 0 if not silent, 2 if silent, 1 on error. "
+            "Optional --switch-output uses SwitchAudioSource (brew install switchaudio-osx)."
+        ),
+        epilog="""
+Examples:
+  infomux audio-recon
+  infomux audio-recon --duration 5 --json
+  infomux audio-recon --switch-output "infomux-capture" --sleep-after-switch 2
+  infomux audio-recon --output-name "infomux-aggregate-device" --play
+  infomux audio-recon --check-only
+""",
+    )
+    audio_recon_cmd.configure_parser(audio_recon_parser)
+
     return parser
 
 
@@ -454,6 +479,8 @@ def main(argv: list[str] | None = None) -> int:
             return cache_cmd.execute(args)
         elif args.command == "analyze-timing":
             return analyze_timing_cmd.execute(args)
+        elif args.command == "audio-recon":
+            return audio_recon_cmd.execute(args)
         else:
             # This shouldn't happen due to required=True on subparsers
             parser.print_help(sys.stderr)
