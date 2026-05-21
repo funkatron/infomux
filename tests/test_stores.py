@@ -599,7 +599,7 @@ class TestStoreBear:
         assert "This is the transcript." in body
         assert "[[my-recording]]" in body  # Back-link to main
 
-    @patch("infomux.steps.store_bear.subprocess.run")
+    @patch("infomux.bear.subprocess.run")
     def test_open_bear_url_calls_subprocess(self, mock_run):
         """_open_bear_url calls macOS open command."""
         from infomux.steps.store_bear import _open_bear_url
