@@ -16,13 +16,11 @@ Output: Opens Bear with the new note (no file output)
 
 from __future__ import annotations
 
-import os
-import subprocess
 import time
-import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 
+from infomux.bear import create_note, get_tags_from_env
 from infomux.log import get_logger
 from infomux.steps import StepError, StepResult, register_step
 from infomux.steps.storage import RunData, format_duration, format_timestamp
@@ -35,8 +33,7 @@ STORE_BEAR_FILENAME = None
 
 def _get_bear_tags() -> list[str]:
     """Get Bear tags from environment."""
-    tags_str = os.environ.get("INFOMUX_BEAR_TAGS", "infomux,transcript")
-    return [t.strip() for t in tags_str.split(",") if t.strip()]
+    return get_tags_from_env("INFOMUX_BEAR_TAGS", "infomux,transcript")
 
 
 def _get_base_title(data: RunData) -> str:
@@ -157,37 +154,11 @@ def _generate_timed_note(data: RunData) -> tuple[str, str] | None:
 def _open_bear_url(
     title: str, text: str, tags: list[str], open_note: bool = False
 ) -> None:
-    """
-    Open Bear with a new note using URL scheme.
-
-    Args:
-        title: Note title.
-        text: Note body.
-        tags: List of tags.
-        open_note: Whether to open the note after creation.
-    """
-    # Build Bear URL
-    params = {
-        "title": title,
-        "text": text,
-        "tags": ",".join(tags),
-        "open_note": "yes" if open_note else "no",
-    }
-
-    url = "bear://x-callback-url/create?" + urllib.parse.urlencode(
-        params, quote_via=urllib.parse.quote
-    )
-
-    # Open URL on macOS
+    """Open Bear with a new note using URL scheme."""
     try:
-        subprocess.run(["open", url], check=True, capture_output=True)
-    except subprocess.CalledProcessError as e:
-        raise StepError("store_bear", f"Failed to open Bear: {e}")
-    except FileNotFoundError:
-        raise StepError(
-            "store_bear",
-            "macOS 'open' command not found. This step only works on macOS.",
-        )
+        create_note(title, text, tags, open_note=open_note)
+    except Exception as exc:
+        raise StepError("store_bear", str(exc)) from exc
 
 
 @register_step
