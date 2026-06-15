@@ -115,6 +115,25 @@ class TestDirectoryWatcher:
         assert watcher.run_once() == 0
         assert calls == 1
 
+    def test_run_once_dry_run_does_not_update_registry(self, tmp_path: Path) -> None:
+        inbox = tmp_path / "inbox"
+        inbox.mkdir()
+        clip = inbox / "note.m4a"
+        clip.write_bytes(b"audio")
+
+        watcher = DirectoryWatcher(
+            directory=inbox,
+            process=lambda _path: 0,
+            glob_pattern="*.m4a",
+            record_processed=False,
+        )
+        assert watcher.run_once() == 0
+        assert not (inbox / ".infomux-watch.json").exists()
+
+        watcher.record_processed = True
+        assert watcher.run_once() == 0
+        assert (inbox / ".infomux-watch.json").exists()
+
     def test_handle_event_schedules_processing(self, tmp_path: Path) -> None:
         inbox = tmp_path / "inbox"
         inbox.mkdir()

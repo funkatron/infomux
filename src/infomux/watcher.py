@@ -145,6 +145,7 @@ class DirectoryWatcher:
     debounce_seconds: float = 2.0
     registry_path: Path | None = None
     fswatch_path: Path | None = None
+    record_processed: bool = True
     _registry: dict[str, Any] = field(default_factory=dict, init=False)
     _timers: dict[Path, threading.Timer] = field(default_factory=dict, init=False)
     _process_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
@@ -253,8 +254,9 @@ class DirectoryWatcher:
         logger.info("watch: processing %s", path)
         exit_code = self.process(path)
         if exit_code == 0:
-            mark_processed(self._registry, path, identity)
-            save_registry(self.registry_path, self._registry)
+            if self.record_processed:
+                mark_processed(self._registry, path, identity)
+                save_registry(self.registry_path, self._registry)
             logger.info("watch: completed %s", path)
         else:
             logger.error("watch: pipeline failed for %s (exit %d)", path, exit_code)

@@ -95,6 +95,7 @@ def execute(args: Namespace) -> int:
         debounce_seconds=args.debounce,
         registry_path=args.registry,
         fswatch_path=args.fswatch,
+        record_processed=not args.dry_run,
     )
 
     if args.once:
