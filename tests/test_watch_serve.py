@@ -59,3 +59,38 @@ glob = "*.m4a"
             once=True,
         )
         assert execute(args) == 1
+
+    def test_serve_respects_config_dry_run(self, tmp_path: Path) -> None:
+        inbox = tmp_path / "inbox"
+        inbox.mkdir()
+        clip = inbox / "note.m4a"
+        clip.write_bytes(b"audio")
+
+        config_path = tmp_path / "config.toml"
+        config_path.write_text(
+            f"""
+[[watch]]
+directory = "{inbox}"
+pipeline = "transcribe"
+dry_run = true
+glob = "*.m4a"
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+
+        args = Namespace(
+            target="serve",
+            config=config_path,
+            fswatch=None,
+            dry_run=False,
+            once=True,
+        )
+
+        with patch("infomux.commands.run.execute", return_value=0) as mock_run:
+            exit_code = execute(args)
+
+        assert exit_code == 0
+        run_args = mock_run.call_args[0][0]
+        assert run_args.dry_run is True
+        assert not (inbox / ".infomux-watch.json").exists()

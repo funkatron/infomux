@@ -155,7 +155,7 @@ def _watcher_from_entry(
     entry: WatchEntry,
     *,
     fswatch_path: Path | None,
-    dry_run: bool,
+    cli_dry_run: bool,
 ) -> DirectoryWatcher | None:
     directory = entry.directory.expanduser().resolve()
     error = _validate_directory(directory)
@@ -163,7 +163,8 @@ def _watcher_from_entry(
         return None
 
     pipeline_args = entry.pipeline.to_namespace()
-    pipeline_args.dry_run = dry_run
+    effective_dry_run = cli_dry_run or entry.pipeline.dry_run
+    pipeline_args.dry_run = effective_dry_run
 
     return _build_watcher(
         directory=directory,
@@ -173,7 +174,7 @@ def _watcher_from_entry(
         debounce_seconds=entry.debounce,
         registry_path=entry.registry,
         fswatch_path=fswatch_path,
-        record_processed=not dry_run,
+        record_processed=not effective_dry_run,
     )
 
 
@@ -191,11 +192,11 @@ def _execute_serve(args: Namespace) -> int:
         return 1
 
     fswatch_path = args.fswatch or config.serve.fswatch
-    dry_run = bool(args.dry_run)
+    cli_dry_run = bool(args.dry_run)
 
     watchers: list[DirectoryWatcher] = []
     for entry in config.watches:
-        watcher = _watcher_from_entry(entry, fswatch_path=fswatch_path, dry_run=dry_run)
+        watcher = _watcher_from_entry(entry, fswatch_path=fswatch_path, cli_dry_run=cli_dry_run)
         if watcher is not None:
             watchers.append(watcher)
 

@@ -81,18 +81,22 @@ class PipelineOptions:
     lyric_word_spacing: int | None = None
     lyric_background_gradient: str | None = None
     lyric_background_image: Path | None = None
+    _explicit: frozenset[str] = field(default_factory=frozenset, repr=False)
 
     def merged_with(self, overrides: PipelineOptions) -> PipelineOptions:
-        """Return a copy with non-None overrides applied."""
+        """Return a copy with overrides applied (respecting explicit boolean false)."""
         data = {name: getattr(self, name) for name in RUN_PIPELINE_FIELDS}
         for name in RUN_PIPELINE_FIELDS:
-            override = getattr(overrides, name)
-            if name in BOOL_PIPELINE_FIELDS:
-                if override:
+            if name in overrides._explicit:
+                data[name] = getattr(overrides, name)
+            elif name not in BOOL_PIPELINE_FIELDS:
+                override = getattr(overrides, name)
+                if override is not None:
                     data[name] = override
-            elif override is not None:
-                data[name] = override
-        return PipelineOptions(**data)
+        return PipelineOptions(
+            **data,
+            _explicit=self._explicit | overrides._explicit,
+        )
 
     def to_namespace(self) -> Namespace:
         """Build an argparse Namespace for build_run_namespace()."""
@@ -139,6 +143,7 @@ def _coerce_pipeline_value(name: str, value: Any) -> Any:
 
 
 def _pipeline_options_from_mapping(data: dict[str, Any]) -> PipelineOptions:
+    explicit = frozenset(name for name in data if name in RUN_PIPELINE_FIELDS)
     values: dict[str, Any] = {name: None for name in RUN_PIPELINE_FIELDS}
     values["dry_run"] = False
     values["word_level_subtitles"] = False
@@ -146,7 +151,7 @@ def _pipeline_options_from_mapping(data: dict[str, Any]) -> PipelineOptions:
         if name not in data:
             continue
         values[name] = _coerce_pipeline_value(name, data[name])
-    return PipelineOptions(**values)
+    return PipelineOptions(**values, _explicit=explicit)
 
 
 def _parse_watch_entry(raw: dict[str, Any], index: int) -> WatchEntry:
@@ -227,9 +232,14 @@ def load_user_config(path: Path | str | None = None) -> UserConfig:
 def apply_defaults_to_args(args: Namespace, defaults: PipelineOptions) -> None:
     """Fill unset CLI pipeline fields from config defaults."""
     for name in RUN_PIPELINE_FIELDS:
-        if name in BOOL_PIPELINE_FIELDS:
-            if not getattr(args, name) and getattr(defaults, name):
+        if name in defaults._explicit:
+            if name in BOOL_PIPELINE_FIELDS:
+                if not getattr(args, name):
+                    setattr(args, name, getattr(defaults, name))
+            elif getattr(args, name) is None:
                 setattr(args, name, getattr(defaults, name))
+            continue
+        if name in BOOL_PIPELINE_FIELDS:
             continue
         if getattr(args, name) is None and getattr(defaults, name) is not None:
             setattr(args, name, getattr(defaults, name))

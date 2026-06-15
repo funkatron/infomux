@@ -93,6 +93,24 @@ pipeline = "summarize"
         assert watch.pipeline.pipeline == "summarize"
         assert watch.pipeline.content_type_hint == "meeting"
 
+    def test_watch_can_disable_boolean_default(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.toml"
+        config_path.write_text(
+            """
+[defaults]
+word_level_subtitles = true
+
+[[watch]]
+directory = "~/Inbox"
+word_level_subtitles = false
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+
+        config = load_user_config(config_path)
+        assert config.watches[0].pipeline.word_level_subtitles is False
+
     def test_invalid_toml_raises(self, tmp_path: Path) -> None:
         config_path = tmp_path / "bad.toml"
         config_path.write_text("[[watch]\n", encoding="utf-8")
