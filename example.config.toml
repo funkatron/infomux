@@ -1,0 +1,30 @@
+# infomux user configuration (TOML)
+#
+# Copy to ~/.config/infomux/config.toml and edit.
+# Override path: INFOMUX_CONFIG=/path/to/config.toml
+#
+# Precedence: CLI flags > this file > built-in defaults.
+# Secrets (API keys) belong in .env — not here.
+
+[defaults]
+pipeline = "transcribe"
+# model = "qwen2.5:32b-instruct"
+# content_type_hint = "meeting"
+
+# Run every [[watch]] entry with: infomux watch serve
+# Install fswatch first: brew install fswatch
+
+[[watch]]
+directory = "~/Inbox"
+pipeline = "transcribe"
+glob = "*.m4a"
+
+[[watch]]
+directory = "~/Downloads"
+pipeline = "summarize"
+glob = "*.mp4"
+debounce = 3.0
+
+# Optional: path to fswatch when not on PATH
+# [serve]
+# fswatch = "/opt/homebrew/bin/fswatch"

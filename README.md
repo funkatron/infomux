@@ -293,9 +293,14 @@ INFOMUX_LOG_LEVEL=DEBUG infomux run --pipeline lyric-video-aligned --lyrics-file
 
 Watch a folder and run a pipeline when new files appear. Uses **fswatch** for filesystem events (install with `brew install fswatch`). Same `--pipeline` and step flags as `infomux run`. Each file is processed after it stops changing (debounce), and completed files are recorded in `.infomux-watch.json` in the watch directory so restarts skip work already done.
 
+For multiple folders, use a config file and `infomux watch serve` (see [Configuration](#configuration) below).
+
 ```bash
 # Transcribe anything dropped into ~/Inbox
 infomux watch ~/Inbox --pipeline transcribe
+
+# Run every [[watch]] entry from ~/.config/infomux/config.toml
+infomux watch serve
 
 # Summarize new MP4s only
 infomux watch ~/Downloads --glob "*.mp4" --pipeline summarize
@@ -305,6 +310,34 @@ infomux watch ~/Inbox --pipeline transcribe --once
 ```
 
 Press Ctrl+C to stop a continuous watch. Failed runs are not recorded; a later filesystem event can retry.
+
+### User config (`config.toml`)
+
+User settings live in **`~/.config/infomux/config.toml`** (override with `INFOMUX_CONFIG`). Copy `example.config.toml` from the repo as a starting point.
+
+Precedence: **CLI flags > config.toml > built-in defaults**. API keys and secrets stay in `.env`, not in the config file.
+
+```toml
+[defaults]
+pipeline = "transcribe"
+
+[[watch]]
+directory = "~/Inbox"
+pipeline = "transcribe"
+glob = "*.m4a"
+
+[[watch]]
+directory = "~/Downloads"
+pipeline = "summarize"
+glob = "*.mp4"
+```
+
+```bash
+cp example.config.toml ~/.config/infomux/config.toml
+infomux watch serve
+```
+
+Single-directory `infomux watch ~/Inbox` also picks up `[defaults]` from the config file when flags are omitted.
 
 ### `infomux inspect`
 
