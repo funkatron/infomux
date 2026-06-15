@@ -125,6 +125,7 @@ Examples:
 
   # Watch a folder and run a pipeline on new files
   infomux watch ~/Inbox --pipeline transcribe
+  infomux watch serve
   infomux watch ~/Downloads --glob "*.mp4" --pipeline summarize --once
 
   # Quick loopback / system-audio check (auto device selection)
@@ -439,6 +440,9 @@ Examples:
 Examples:
   # Transcribe anything dropped into ~/Inbox
   infomux watch ~/Inbox --pipeline transcribe
+
+  # Run all [[watch]] entries from ~/.config/infomux/config.toml
+  infomux watch serve
 
   # Summarize new MP4s only
   infomux watch ~/Downloads --glob "*.mp4" --pipeline summarize

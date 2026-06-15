@@ -149,6 +149,7 @@ class DirectoryWatcher:
     _registry: dict[str, Any] = field(default_factory=dict, init=False)
     _timers: dict[Path, threading.Timer] = field(default_factory=dict, init=False)
     _process_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
+    _proc: subprocess.Popen[str] | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.directory = self.directory.expanduser().resolve()
@@ -277,6 +278,16 @@ class DirectoryWatcher:
                 exit_code = result
         return exit_code
 
+    def stop(self) -> None:
+        """Stop fswatch and cancel pending debounce timers."""
+        self._cancel_timers()
+        if self._proc is not None and self._proc.poll() is None:
+            self._proc.terminate()
+            try:
+                self._proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self._proc.kill()
+
     def run_forever(self) -> int:
         """Watch with fswatch until interrupted."""
         fswatch = find_fswatch(self.fswatch_path)
@@ -303,15 +314,16 @@ class DirectoryWatcher:
         logger.debug("fswatch command: %s", " ".join(cmd))
 
         exit_code = 0
-        proc: subprocess.Popen[str] | None = None
+        self._proc = None
         try:
-            proc = subprocess.Popen(
+            self._proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
             )
+            proc = self._proc
             assert proc.stdout is not None
             for line in proc.stdout:
                 if line.strip():
@@ -326,11 +338,6 @@ class DirectoryWatcher:
             logger.info("watch stopped")
             exit_code = 130 if exit_code == 0 else exit_code
         finally:
-            self._cancel_timers()
-            if proc is not None and proc.poll() is None:
-                proc.terminate()
-                try:
-                    proc.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
+            self.stop()
+            self._proc = None
         return exit_code

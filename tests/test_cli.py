@@ -116,9 +116,17 @@ class TestParser:
         )
 
         assert args.command == "watch"
-        assert args.directory == inbox
+        assert args.target == str(inbox)
         assert args.pipeline == "transcribe"
         assert args.glob == "*.mp4"
+        assert args.once is True
+
+    def test_watch_serve_command(self) -> None:
+        """watch serve parses as serve target."""
+        parser = create_parser()
+        args = parser.parse_args(["watch", "serve", "--once"])
+        assert args.command == "watch"
+        assert args.target == "serve"
         assert args.once is True
 
     def test_main_watch_dispatch(self, tmp_path) -> None:
