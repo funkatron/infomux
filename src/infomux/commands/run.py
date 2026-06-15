@@ -94,21 +94,39 @@ def download_url(url: str, output_path: Path) -> Path:
         raise urllib.error.URLError(f"Failed to download URL: {e.reason}") from e
 
 
-def configure_parser(parser: ArgumentParser) -> None:
+# Namespace fields shared by `run` and `watch` (everything except input/check-deps).
+RUN_PIPELINE_FIELDS = (
+    "pipeline",
+    "steps",
+    "dry_run",
+    "model",
+    "openai_model",
+    "openai_base_url",
+    "content_type_hint",
+    "word_level_subtitles",
+    "video_background_image",
+    "video_background_color",
+    "video_size",
+    "lyric_font_name",
+    "lyric_font_file",
+    "lyric_font_size",
+    "lyrics_file",
+    "alignment_model",
+    "lyric_font_color",
+    "lyric_position",
+    "lyric_word_spacing",
+    "lyric_background_gradient",
+    "lyric_background_image",
+)
+
+
+def add_pipeline_arguments(parser: ArgumentParser) -> None:
     """
-    Configure the argument parser for the 'run' command.
+    Add pipeline and step options shared by run and watch commands.
 
     Args:
-        parser: The subparser to configure.
+        parser: Parser or subparser to configure.
     """
-    parser.add_argument(
-        "input",
-        type=str,
-        nargs="?",  # Optional when using --check-deps
-        help="Path to the input media file or URL (http:// or https://). "
-        "Supports audio (mp3, m4a, wav), video (mp4, mov), and text/html files. "
-        "URLs are automatically downloaded to the run directory.",
-    )
     parser.add_argument(
         "--pipeline",
         "-p",
@@ -131,12 +149,6 @@ def configure_parser(parser: ArgumentParser) -> None:
         action="store_true",
         help="Show what would be done without executing. "
         "Displays the pipeline, steps, and job configuration that would be used.",
-    )
-    parser.add_argument(
-        "--check-deps",
-        action="store_true",
-        help="Check for required dependencies (ffmpeg, whisper-cli, models) and exit. "
-        "Shows status of all dependencies including optional ones like EasyOCR.",
     )
     parser.add_argument(
         "--model",
@@ -277,6 +289,42 @@ def configure_parser(parser: ArgumentParser) -> None:
         help="Path to background image for lyric video. Image will be scaled/cropped to fit. "
         "Requires lyric-video pipeline.",
     )
+
+
+def configure_parser(parser: ArgumentParser) -> None:
+    """
+    Configure the argument parser for the 'run' command.
+
+    Args:
+        parser: The subparser to configure.
+    """
+    parser.add_argument(
+        "input",
+        type=str,
+        nargs="?",  # Optional when using --check-deps
+        help="Path to the input media file or URL (http:// or https://). "
+        "Supports audio (mp3, m4a, wav), video (mp4, mov), and text/html files. "
+        "URLs are automatically downloaded to the run directory.",
+    )
+    add_pipeline_arguments(parser)
+    parser.add_argument(
+        "--check-deps",
+        action="store_true",
+        help="Check for required dependencies (ffmpeg, whisper-cli, models) and exit. "
+        "Shows status of all dependencies including optional ones like EasyOCR.",
+    )
+
+
+def build_run_namespace(source: Namespace, input_path: Path | str) -> Namespace:
+    """
+    Build a run-command namespace from shared pipeline options plus an input file.
+
+    Used by `infomux watch` to invoke the same pipeline logic as `infomux run`.
+    """
+    data = {field: getattr(source, field) for field in RUN_PIPELINE_FIELDS}
+    data["input"] = str(input_path)
+    data["check_deps"] = False
+    return Namespace(**data)
 
 
 def execute(args: Namespace) -> int:
