@@ -289,6 +289,23 @@ INFOMUX_LOG_LEVEL=DEBUG infomux run --pipeline lyric-video-aligned --lyrics-file
 
 **Output:** Prints the run directory path to stdout.
 
+### `infomux watch`
+
+Watch a folder and run a pipeline when new files appear. Uses **fswatch** for filesystem events (install with `brew install fswatch`). Same `--pipeline` and step flags as `infomux run`. Each file is processed after it stops changing (debounce), and completed files are recorded in `.infomux-watch.json` in the watch directory so restarts skip work already done.
+
+```bash
+# Transcribe anything dropped into ~/Inbox
+infomux watch ~/Inbox --pipeline transcribe
+
+# Summarize new MP4s only
+infomux watch ~/Downloads --glob "*.mp4" --pipeline summarize
+
+# Process existing files once and exit (no continuous watch)
+infomux watch ~/Inbox --pipeline transcribe --once
+```
+
+Press Ctrl+C to stop a continuous watch. Failed runs are not recorded; a later filesystem event can retry.
+
 ### `infomux inspect`
 
 View details of a completed run.

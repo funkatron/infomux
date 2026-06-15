@@ -97,6 +97,41 @@ class TestParser:
         assert args.command == "cache"
         assert args.json is True
 
+    def test_watch_command(self, tmp_path) -> None:
+        """watch command parses directory and pipeline options."""
+        parser = create_parser()
+        inbox = tmp_path / "inbox"
+        inbox.mkdir()
+
+        args = parser.parse_args(
+            [
+                "watch",
+                str(inbox),
+                "--pipeline",
+                "transcribe",
+                "--glob",
+                "*.mp4",
+                "--once",
+            ]
+        )
+
+        assert args.command == "watch"
+        assert args.directory == inbox
+        assert args.pipeline == "transcribe"
+        assert args.glob == "*.mp4"
+        assert args.once is True
+
+    def test_main_watch_dispatch(self, tmp_path) -> None:
+        """main dispatches watch command."""
+        inbox = tmp_path / "inbox"
+        inbox.mkdir()
+
+        with patch("infomux.commands.watch.execute", return_value=0) as mock_execute:
+            exit_code = main(["watch", str(inbox), "--once"])
+
+        assert exit_code == 0
+        assert mock_execute.called
+
     def test_main_cache_dispatch(self) -> None:
         """main dispatches cache command."""
         with patch("infomux.commands.cache.execute", return_value=0) as mock_execute:

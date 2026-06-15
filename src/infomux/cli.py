@@ -20,6 +20,7 @@ from infomux.commands import inspect as inspect_cmd
 from infomux.commands import resume as resume_cmd
 from infomux.commands import run as run_cmd
 from infomux.commands import stream as stream_cmd
+from infomux.commands import watch as watch_cmd
 from infomux.env import load_dotenv
 from infomux.log import configure_logging, get_logger
 
@@ -46,6 +47,7 @@ def _print_parse_tips(argv: list[str]) -> None:
         "cache",
         "analyze-timing",
         "audio-recon",
+        "watch",
     }
     first_token = argv[0] if argv else None
 
@@ -62,7 +64,7 @@ def _print_parse_tips(argv: list[str]) -> None:
     if first_token not in known_commands:
         print("\nUnknown command. Available commands:", file=sys.stderr)
         print(
-            "  run, inspect, resume, stream, cleanup, cache, analyze-timing, audio-recon",
+            "  run, inspect, resume, stream, watch, cleanup, cache, analyze-timing, audio-recon",
             file=sys.stderr,
         )
         print("  infomux --help", file=sys.stderr)
@@ -120,6 +122,10 @@ Examples:
   infomux stream --prompt
   infomux stream --input 0 --output 1 --silence 5
   infomux stream --pipeline summarize
+
+  # Watch a folder and run a pipeline on new files
+  infomux watch ~/Inbox --pipeline transcribe
+  infomux watch ~/Downloads --glob "*.mp4" --pipeline summarize --once
 
   # Quick loopback / system-audio check (auto device selection)
   infomux audio-recon
@@ -421,6 +427,31 @@ Examples:
     )
     audio_recon_cmd.configure_parser(audio_recon_parser)
 
+    watch_parser = subparsers.add_parser(
+        "watch",
+        help="Watch a directory and run a pipeline on new files",
+        description=(
+            "Watch a directory with fswatch for new media files. When a file stops "
+            "changing (debounce), run the same pipeline as `infomux run`. Processed "
+            "files are tracked in .infomux-watch.json so restarts skip completed work."
+        ),
+        epilog="""
+Examples:
+  # Transcribe anything dropped into ~/Inbox
+  infomux watch ~/Inbox --pipeline transcribe
+
+  # Summarize new MP4s only
+  infomux watch ~/Downloads --glob "*.mp4" --pipeline summarize
+
+  # Drain existing files once, then exit
+  infomux watch ~/Inbox --pipeline transcribe --once
+
+  # Same pipeline flags as run (model, content-type hint, etc.)
+  infomux watch ~/Inbox --pipeline summarize --model qwen2.5:32b-instruct
+""",
+    )
+    watch_cmd.configure_parser(watch_parser)
+
     return parser
 
 
@@ -481,6 +512,8 @@ def main(argv: list[str] | None = None) -> int:
             return analyze_timing_cmd.execute(args)
         elif args.command == "audio-recon":
             return audio_recon_cmd.execute(args)
+        elif args.command == "watch":
+            return watch_cmd.execute(args)
         else:
             # This shouldn't happen due to required=True on subparsers
             parser.print_help(sys.stderr)
